@@ -1,9 +1,9 @@
-name: Lint
+name: CheckBlackFormatting
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
-  lint:
+  check-black-formatting:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v3
