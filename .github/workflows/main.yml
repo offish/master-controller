@@ -1,4 +1,4 @@
-name: CheckBlackFormatting
+name: hydroplant-workflow
 
 on: [pull_request]
 
@@ -10,5 +10,5 @@ jobs:
       - uses: psf/black@stable
         with:
           options: "--check --verbose"
-          src: "./*.py controller/"
+          src: "**.py"
           version: "22.3.0"
