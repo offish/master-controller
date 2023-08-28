@@ -1,3 +1,5 @@
 paho-mqtt
 pymongo
 black
+sphinx
+sphinx-rtd-theme
