@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath("extensions"))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "master-controller"
-copyright = "2023, hydroplant"
+copyright = "2021-2023, hydroplant.no"
 author = "hydroplantno"
 
 with open("../controller/__init__.py") as f:
@@ -71,3 +71,7 @@ html_theme_options = {
     "includehidden": True,
     "prev_next_buttons_location": None,
 }
+
+html_css_files = [
+    "css/custom.css",
+]

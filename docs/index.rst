@@ -10,8 +10,8 @@ hydroplant-master-controller's documentation
    :maxdepth: 2
    :caption: Contents:
 
-   pages/main
    pages/autonomy
+   pages/controller
    pages/config
    pages/database
    pages/utils

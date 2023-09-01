@@ -1,7 +1,7 @@
-database.py
+controller.py
 =============
 
-.. automodule:: controller.database
+.. automodule:: controller.controller
     :members:
     :undoc-members:
     :private-members:

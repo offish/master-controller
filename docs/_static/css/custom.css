@@ -1,0 +1,41 @@
+body {
+    --black: #1d0e03;
+    --dark-green: #00563F;
+    --light-green: #09793BFA;
+    --beige: #FAECE1;
+
+}
+
+.wy-side-nav-search {
+    background-color: var(--light-green);
+}
+
+.wy-nav-top {
+    background-color: var(--dark-green);
+}
+
+.wy-nav-content {
+    background-color: var(--beige);
+}
+
+/* background */
+.wy-body-for-nav {
+
+    background-image: url("./background.jpg");
+}
+
+.wy-side-scroll {
+    background-color: var(--dark-green);
+}
+
+a {
+    color: var(--light-green);
+}
+
+a:hover {
+    color: greenyellow;
+}
+
+.wy-menu>ul>.toctree-l1>a:hover {
+    background-color: var(--light-green);
+}
