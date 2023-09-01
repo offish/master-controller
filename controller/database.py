@@ -13,8 +13,18 @@ class Database:
         self.measurement = self.db["measurements"]
         self.actuator = self.db["actuator"]
         self.sensor = self.db["sensor"]
+        self.state = self.db["state"]
+        self.logs = self.db["logs"]
 
     def _get_which_database(self, topic: str) -> collection.Collection:
+        """Gets which database to use.
+
+        Args:
+            topic: MQTT topic for that message
+
+        Returns:
+            A MongoDB collection to use
+        """
         if "sensor" in topic:
             return self.sensor
 
@@ -26,16 +36,41 @@ class Database:
 
         return self.db[topic]
 
-    def add_measurement(self, sensor_id: str, data: dict) -> None:
+    def add_measurement(self, node_id: str, sensor_id: str, data: dict) -> None:
+        """Insert measurement into database.
+
+        Args:
+            node_id: Name of the node.
+            sensor_id: Name of the sensor.
+            data: Data which should be added, time will also be added to the
+              measurement.
+        """
+        data["node_id"] = node_id
         data["sensor_id"] = sensor_id
+        data["time"] = time.time()
+
         self.measurement.insert_one(data)
 
-    def add_data(self, topic: str, data: dict) -> None:
-        db = self._get_which_database(topic)
+    def add_log(self, node_id: str, sensor_id: str, data: dict) -> None:
+        """Insert log into database.
 
-        # if db is self.measurement:
-        #     self.add_measurement_data(topic,data)
-        #     return
+        Used for logging.
+
+        Args:
+            node_id: Name of the node.
+            sensor_id: Name of the sensor.
+            data: Data which should be added, time will also be added to the logging
+              message.
+        """
+        data["node_id"] = node_id
+        data["sensor_id"] = sensor_id
+        data["time"] = time.time()
+
+        self.logs.insert_one(data)
+
+    def add_data(self, topic: str, data: dict) -> None:
+        # db = self._get_which_database(topic)
+        return
 
         data["time"] = time.time()
         db.insert_one(data)
