@@ -15,6 +15,12 @@ docker start emqx
 python3 main.py
 ```
 
+## Run GitHub Actions
+```bash
+# actions-runner/
+sudo nohup ./run.sh &
+```
+
 ## Documentation
 ### Building
 Build documentation locally

@@ -7,7 +7,7 @@ class Autonomy:
     Defaults to be enabled.
     """
 
-    def __init__(self, publisher, count: int = 1000, wait: float = 1.0) -> None:
+    def __init__(self, publisher, count: int = 1_000, wait: float = 1.0) -> None:
         self.data = []  # data is everything master-controller receives
         self.count = count  # amount of data autonomy should remember
         self.is_enabled = True  # turn on/off autonomy logic

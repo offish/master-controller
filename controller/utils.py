@@ -59,3 +59,33 @@ def get_all_gui_topics(topics: list[str]) -> list[str]:
             gui_commands.append(topic)
 
     return gui_commands
+
+
+def get_floor(data: dict) -> str:
+    for i in data:
+        if "floor" in i:
+            return i
+    return ""
+
+
+def get_stages(floor: str, data: dict) -> list[str]:
+    stages = []
+    for i in data[floor]:
+        stages.append(i)
+    return stages
+
+
+def get_stage_from_topic(topic: str) -> str:
+    topics = topic.split("/")
+    for i in topics:
+        if "stage" in i:
+            return i
+    return ""
+
+
+def get_floor_from_topic(topic: str) -> str:
+    topics = topic.split("/")
+    for i in topics:
+        if "floor" in i:
+            return i
+    return ""

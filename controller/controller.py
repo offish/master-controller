@@ -9,10 +9,15 @@ from .utils import (
     get_second_last_part,
     get_device_topic,
     get_all_gui_topics,
+    get_floor,
+    get_stages,
+    get_floor_from_topic,
+    get_stage_from_topic,
 )
 from .autonomy import Autonomy
 
 from threading import Thread
+import time
 import json
 
 import paho.mqtt.client as mqtt
@@ -41,7 +46,11 @@ class Controller:
         self.autonomy = Autonomy(self.publisher)
         self.all_topics = []
         self.all_devices = []
-        # self.state = {}
+        self.state = {}
+
+    def update_state(self, last_part: str, data: dict) -> None:
+        self.state[last_part] = data["value"]
+        self.db.update_state(self.state)
 
     def publisher(self, topic: str, data: dict | list) -> None:
         """Function for the autonomy to communicate with MQTT."""
@@ -71,16 +80,17 @@ class Controller:
 
     def on_message(self, client, userdata, msg) -> None:
         """Handles MQTT messages."""
-        add_to_autonomy = False
-        topic = msg.topic
-        data = json.loads(msg.payload)
-        print(data)
+        topic: str = msg.topic
+        data: dict = json.loads(msg.payload)
+        data["time"] = time.time()  # add time for later checks
 
+        print(f"Got data {data}")
+
+        add_to_autonomy = False
         node_id = get_second_last_part(topic)
         last_part = get_last_part(topic)
 
         print("Got a new", last_part, "message from", node_id)
-        # add data to autonomy, as it should know everything
 
         if "device" in topic:
             # print("Got command from GUI")
@@ -91,24 +101,33 @@ class Controller:
 
             actuator_id = get_last_part(topic)
 
-            command_topic = get_device_topic(
-                node_id, actuator_id, self.all_devices
-            ).format("command")
+            # floor = get_floor_from_topic(topic)
+            # stage = get_stage_from_topic(topic)
 
-            if not command_topic:
+            command_topic = topic.replace("gui_command", "command")
+
+            if not topic in self.all_topics:
                 # device does not exist
                 self._publish(
                     LOG_TOPIC,
                     {
                         "level": "error",
-                        "message": f"{node_id}/{actuator_id} does not exist!",
+                        "message": f"{command_topic} does not exist!",
                     },
                 )
                 return
 
+            data["id"] = actuator_id
+
             add_to_autonomy = True
             self._publish(command_topic, data)
 
+        # actuator activity, on or off
+        if "activity" in topic:
+            print("Got new actuator activity")
+            self.update_state(last_part, data)
+
+        # sensor measurement
         if "measurement" in topic:
             print("Got new sensor measurement")
 
@@ -166,11 +185,6 @@ class Controller:
         """
         node_id = data["device_id"]
 
-        # self.autonomy.disable()
-
-        # floor and stage is hardcoded as of now
-        device = "hydroplant/{}/floor_1/stage_1/" + node_id + "/"
-
         if node_id == "gui":
             print("hei gui")
 
@@ -179,33 +193,46 @@ class Controller:
             print(gui_topics)
 
             self._publish(GUI_TOPICS, {"topics": gui_topics})
-
-        if not data.get("actuators"):
             return
 
-        for actuator_id in data["actuators"]:
-            actuator = device + actuator_id
+        floor = get_floor(data)
+        stages = get_stages(floor, data)
 
-            gui_command_response = actuator.format("gui_command") + "/response"
-            gui_command = actuator.format("gui_command")
-            action = actuator.format("actuator/action")
-            command = actuator.format("command")
-            log = actuator.format("log")
+        # self.autonomy.disable()
 
-            self.add_topics_and_subscribe(
-                actuator, action, gui_command_response, gui_command, command, log
-            )
+        for stage in stages:
+            actuators = data[floor][stage].get("actuators")
+            sensors = data[floor][stage].get("sensors")
 
-        if not data.get("sensors"):
-            return
+            device = "hydroplant/{}/" + f"{floor}/{stage}/{node_id}/"
 
-        for sensor_id in data["sensors"]:
-            sensor = device + sensor_id
+            if actuators:
+                for actuator_id in actuators:
+                    actuator = device + actuator_id
 
-            measurement = sensor.format("sensor/measurement")
-            log = sensor.format("log")
+                    gui_command_response = actuator.format("gui_command") + "/response"
+                    gui_command = actuator.format("gui_command")
+                    action = actuator.format("actuator/action")
+                    command = actuator.format("command")
+                    log = actuator.format("log")
 
-            self.add_topics_and_subscribe(sensor, measurement, log)
+                    self.add_topics_and_subscribe(
+                        actuator,
+                        action,
+                        gui_command_response,
+                        gui_command,
+                        command,
+                        log,
+                    )
+
+            if sensors:
+                for sensor_id in sensors:
+                    sensor = device + sensor_id
+
+                    measurement = sensor.format("sensor/measurement")
+                    log = sensor.format("log")
+
+                    self.add_topics_and_subscribe(sensor, measurement, log)
 
         # print(self.all_devices)
         # print(self.all_topics)
@@ -221,5 +248,4 @@ class Controller:
         communication = Thread(target=self.client.loop_forever)
         communication.start()
         # self.client.loop_forever()
-
         self.autonomy.run()
