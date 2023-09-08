@@ -68,6 +68,12 @@ class Database:
 
         self.logs.insert_one(data)
 
+    def save_state(self, **kwargs) -> None:
+        for arg in kwargs:
+            # self.state.find({})
+            # self.state.replace_one()
+            pass
+
     def add_data(self, topic: str, data: dict) -> None:
         # db = self._get_which_database(topic)
         return

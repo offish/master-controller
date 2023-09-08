@@ -6,8 +6,6 @@ BROKER_PORT = 1883
 DATABASE_HOST = "localhost"
 DATABASE_PORT = 27017
 
-# mqtt topics
-DEVICE_TOPIC = "hydroplant/device"
-COMMAND_TOPIC = "hydroplant/command"
-LOG_TOPIC = "hydroplant/log"
-GUI_TOPIC = "hydroplant/gui_command/#"
+# hydroplant/gui/topics
+# hydroplant/gui_command/floor_1/stage_1/water_node/ph
+# hydroplant/gui_command/floor_1/stage_1/water_node/ph/response
