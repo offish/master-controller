@@ -13,12 +13,15 @@ from .utils import (
     get_stages,
     get_floor_from_topic,
     get_stage_from_topic,
+    topic_contains,
 )
 from .autonomy import Autonomy
 
 from threading import Thread
+import logging
 import time
 import json
+
 
 import paho.mqtt.client as mqtt
 
@@ -44,17 +47,28 @@ class Controller:
         self.client = mqtt.Client(client_id="master")
         self.db = Database()
         self.autonomy = Autonomy(self.publisher)
+        self.all_gui_topics = []
         self.all_topics = []
         self.all_devices = []
         self.state = {}
 
     def update_state(self, last_part: str, data: dict) -> None:
         self.state[last_part] = data["value"]
+        self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
 
     def publisher(self, topic: str, data: dict | list) -> None:
         """Function for the autonomy to communicate with MQTT."""
         self._publish(topic, data)
+
+    def log(self, level: int, message: str) -> None:
+        log = {
+            "level": level,
+            "message": message,
+            "device_id": "master-controller",
+            "floor": "floor_100",
+        }
+        self._publish("hydroplant/gui/log", log)
 
     def _publish(self, topic: str, data: dict | list) -> None:
         """Publish a message to a topic over MQTT.
@@ -66,92 +80,88 @@ class Controller:
             data: JSON data to be published
         """
         data_string = json.dumps(data)
-        self.client.publish(topic, data_string)
+        logging.debug(f"Sending to {topic} with payload {data_string}")
+        self.client.publish(topic, payload=data_string)
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         """Handles MQTT connection to broker and subscribes to needed topics."""
-        print("Connected to", BROKER_HOST, "with result code " + str(rc))
-        # print(userdata, flags)
+        logging.info(f"Connected to {BROKER_HOST} with result code {rc}")
 
+        # subscribe to devices, so they can present themselves
         client.subscribe(DEVICE_TOPIC)
 
-        # subscribe to all commands coming from GUI
-        client.subscribe(GUI_COMMANDS)
+        # subscribing to
+
+        # subscribe to logging
+        client.subscribe(LOG_TOPIC)
 
     def on_message(self, client, userdata, msg) -> None:
         """Handles MQTT messages."""
         topic: str = msg.topic
         data: dict = json.loads(msg.payload)
+
+        inform_autonomy = False
+
+        # TODO: dont listen to ourselves
+        # if data.get("device_id") == "master-controller":
+        #     return
+
         data["time"] = time.time()  # add time for later checks
 
-        print(f"Got data {data}")
+        logging.debug(f"{topic} {data}")
 
-        add_to_autonomy = False
         node_id = get_second_last_part(topic)
         last_part = get_last_part(topic)
 
-        print("Got a new", last_part, "message from", node_id)
+        logging.debug(f"Got new {last_part} message from {node_id} with payload {data}")
 
-        if "device" in topic:
-            # print("Got command from GUI")
+        self.log(1, "received a message!")
+
+        if topic_contains(topic, "device"):
+            logging.info("Got device message")
             self.setup_device(data)
 
-        if "gui_command" in topic:
-            print("Got command from GUI")
+        if topic_contains(topic, "gui_command"):
+            logging.info("Got command from GUI")
 
             actuator_id = get_last_part(topic)
 
-            # floor = get_floor_from_topic(topic)
-            # stage = get_stage_from_topic(topic)
+            floor = get_floor_from_topic(topic)
+            stage = get_stage_from_topic(topic)
 
             command_topic = topic.replace("gui_command", "command")
 
-            if not topic in self.all_topics:
-                # device does not exist
-                self._publish(
-                    LOG_TOPIC,
-                    {
-                        "level": "error",
-                        "message": f"{command_topic} does not exist!",
-                    },
-                )
-                return
-
             data["id"] = actuator_id
+            data["floor"] = floor
+            data["stage"] = stage
 
-            add_to_autonomy = True
-            self._publish(command_topic, data)
+            inform_autonomy = True
+
+            self._publish(topic=command_topic, data=data)
+
+        if topic_contains(topic, "receipt"):
+            logging.info("Got a receipt")
+
+            inform_autonomy = True
 
         # actuator activity, on or off
-        if "activity" in topic:
-            print("Got new actuator activity")
+        if topic_contains(topic, "activity"):
+            logging.info("Got new actuator action")
             self.update_state(last_part, data)
 
         # sensor measurement
-        if "measurement" in topic:
-            print("Got new sensor measurement")
+        if topic_contains(topic, "measurement"):
+            logging.info("Got new sensor measurement")
 
             sensor_id = get_last_part(topic)
             self.db.add_measurement(node_id, sensor_id, data)
-            add_to_autonomy = True
+            inform_autonomy = True
 
-            command_topic = get_device_topic(
-                node_id, sensor_id, self.all_devices
-            ).format("command")
+        # if "log" in topic:
+        #     sensor_id = get_last_part(topic)
+        #     self.db.add_log(node_id, sensor_id, data)
 
-            if not command_topic:
-                return
-
-            print(f"{command_topic=}")
-
-            res = self._publish(command_topic, {"value": 1})
-            print(res)
-
-        if "log" in topic:
-            sensor_id = get_last_part(topic)
-            self.db.add_log(node_id, sensor_id, data)
-
-        if add_to_autonomy:
+        if inform_autonomy:
             self.autonomy.add_data({"topic": topic, "type": last_part, **data})
 
     def add_topics_and_subscribe(self, device: str, *args) -> None:
@@ -169,10 +179,10 @@ class Controller:
             if topic in self.all_topics:
                 continue
 
-            self.client.subscribe(topic)
+            self.client.subscribe(topic=topic)
             self.all_topics.append(topic)
 
-            print("Now subscribing to new topic:", topic)
+            logging.info(f"Subscribed to {topic}")
 
     def setup_device(self, data: dict) -> None:
         """Setups device given data.
@@ -186,13 +196,13 @@ class Controller:
         node_id = data["device_id"]
 
         if node_id == "gui":
-            print("hei gui")
+            logging.info("GUI connected")
 
-            gui_topics = get_all_gui_topics(self.all_topics)
+            # gui_topics = get_all_gui_topics(self.all_topics)
 
-            print(gui_topics)
+            logging.debug(f"{self.all_gui_topics}")
 
-            self._publish(GUI_TOPICS, {"topics": gui_topics})
+            self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
             return
 
         floor = get_floor(data)
@@ -212,30 +222,28 @@ class Controller:
 
                     gui_command_response = actuator.format("gui_command") + "/response"
                     gui_command = actuator.format("gui_command")
-                    action = actuator.format("actuator/action")
-                    command = actuator.format("command")
-                    log = actuator.format("log")
+                    receipt = actuator.format("command") + "/receipt"
+                    # action = actuator.format("actuator/action")
+                    # log = actuator.format("log")
 
-                    self.add_topics_and_subscribe(
-                        actuator,
-                        action,
-                        gui_command_response,
-                        gui_command,
-                        command,
-                        log,
-                    )
+                    master_topics = [gui_command, receipt]
+                    gui_topics = [gui_command, gui_command_response]
+
+                    self.add_topics_and_subscribe(actuator, *master_topics)
+
+                    for i in gui_topics:
+                        self.all_gui_topics.append(i)
 
             if sensors:
                 for sensor_id in sensors:
                     sensor = device + sensor_id
 
                     measurement = sensor.format("sensor/measurement")
-                    log = sensor.format("log")
+                    # log = sensor.format("log")
 
-                    self.add_topics_and_subscribe(sensor, measurement, log)
+                    master_topics = [measurement]
 
-        # print(self.all_devices)
-        # print(self.all_topics)
+                    self.add_topics_and_subscribe(sensor, *master_topics)
 
     def run(self) -> None:
         """Start the master-controller and keep it running
@@ -245,7 +253,10 @@ class Controller:
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)
 
+        logging.debug("Starting MQTT loop")
         communication = Thread(target=self.client.loop_forever)
         communication.start()
-        # self.client.loop_forever()
+
+        logging.debug("Starting autonomy")
+        self.autonomy.disable()
         self.autonomy.run()

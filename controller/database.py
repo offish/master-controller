@@ -1,5 +1,7 @@
 from .config import DATABASE_HOST, DATABASE_PORT
 
+import logging
+
 from pymongo import MongoClient, collection
 
 
@@ -47,6 +49,7 @@ class Database:
         data["sensor_id"] = sensor_id
 
         self.measurement.insert_one(data)
+        logging.debug(f"Added to database {data}")
 
     def add_log(self, node_id: str, sensor_id: str, data: dict) -> None:
         """Insert log into database.
@@ -62,6 +65,7 @@ class Database:
         data["sensor_id"] = sensor_id
 
         self.logs.insert_one(data)
+        logging.debug(f"Added to database {data}")
 
     def _get_state(self) -> dict:
         return self.db.find_one({})

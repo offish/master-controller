@@ -62,6 +62,14 @@ def get_all_gui_topics(topics: list[str]) -> list[str]:
 
 
 def get_floor(data: dict) -> str:
+    """Gets the floor string from JSON.
+
+    Args:
+        data: JSON response
+
+    Returns:
+        Returns the first match in the dict as a string. E.g. floor_1
+    """
     for i in data:
         if "floor" in i:
             return i
@@ -69,6 +77,15 @@ def get_floor(data: dict) -> str:
 
 
 def get_stages(floor: str, data: dict) -> list[str]:
+    """Loops through floor and gives stages.
+
+    Args:
+        floor: name of floor
+        data: JSON data
+
+    Returns:
+        A list of stage names in given floor.
+    """
     stages = []
     for i in data[floor]:
         stages.append(i)
@@ -76,6 +93,16 @@ def get_stages(floor: str, data: dict) -> list[str]:
 
 
 def get_stage_from_topic(topic: str) -> str:
+    """Gives stage name given a topic.
+
+    If there is no match, it will return `""`.
+
+    Args:
+        topic: The MQTT topic string
+
+    Returns:
+        The stage as a string. E.g stage_1
+    """
     topics = topic.split("/")
     for i in topics:
         if "stage" in i:
@@ -84,8 +111,75 @@ def get_stage_from_topic(topic: str) -> str:
 
 
 def get_floor_from_topic(topic: str) -> str:
+    """Gives floor name given a topic.
+
+    If there is no match, it will return `""`.
+
+    Args:
+        topic: The MQTT topic string
+
+    Returns:
+        The floor as a string. E.g floor_1
+    """
     topics = topic.split("/")
     for i in topics:
         if "floor" in i:
             return i
     return ""
+
+
+def is_type(type_name: str, data: dict) -> bool:
+    """Check if data is given type.
+
+    Args:
+        type_name: name of type to match
+        data: data dictionary
+
+    Returns:
+        Wheter or not the type matches
+    """
+    return data["type"] == type_name
+
+
+def is_topic(topic_name: str, data: dict) -> bool:
+    """Check if data is given topic.
+
+    Args:
+        topic_name: name of topic to match
+        data: data dictionary
+
+    Returns:
+        Wheter or not the topic matches
+    """
+    return topic_name in data["topic"]
+
+
+def has_status(status: str, data: dict) -> bool:
+    """Check if data has given status.
+
+    Args:
+        status: status name to check for, `unchecked`, `pending` or `done`
+        data: data dictionary
+
+    Returns:
+        Wheter or not the status match
+    """
+    # if not status in ["unchecked", "pending", "done"]:
+    #     raise KeyError(f"{status} status does not exist!")
+    return data.get("status") == status
+
+
+def topic_contains(topic: str, *args: str) -> bool:
+    """Check if any of the args given exists in the topic.
+
+    Args:
+        topic: name of topic
+        *args: strings which should be checked for
+
+    Returns:
+        Wheter or not the topic contains one or more of the args.
+    """
+    for arg in args:
+        if arg in topic:
+            return True
+    return False
