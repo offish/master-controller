@@ -1,4 +1,5 @@
-from .utils import has_status, is_topic, is_type, topic_contains, get_topics_containing
+from .utils import has_status
+
 import datetime as dt
 import logging
 import time
@@ -10,13 +11,15 @@ class Autonomy:
     Defaults to be enabled.
     """
 
-    def __init__(self, publisher, count: int = 1_000, wait: float = 1.0) -> None:
-        self.topics: list[str] = []  # topics to publish to
+    def __init__(
+        self, publisher_callback, topics_callback, count: int = 1_000, wait: float = 1.0
+    ) -> None:
         self.data: list[dict] = []  # data is everything master-controller receives
         self.jobs: list[dict] = []  # all pending jobs
         self.count = count  # amount of data autonomy should remember
         self.is_enabled = True  # turn on/off autonomy logic
-        self.publisher = publisher  # callback to communicate with MQTT
+        self.publisher = publisher_callback  # callback to communicate with MQTT
+        self.topics = topics_callback  # all topics master knows of
         self.wait = wait  # how long autonomy should sleep for each cycle
         self.state = {}  # current state of the system
 
@@ -27,9 +30,6 @@ class Autonomy:
     def disable(self) -> None:
         """Disable the autonomy."""
         self.is_enabled = False
-
-    def add_topic(self, topic: str) -> None:
-        self.topics.append(topic)
 
     def add_data(self, data: dict) -> None:
         data["status"] = "unchecked"
@@ -56,25 +56,31 @@ class Autonomy:
 
     def replace_job(self, job: dict) -> None:
         for j in self.jobs:
-            if job["time"] == j["time"]:
+            if j["time"] == job["time"]:
                 index = self.jobs.index(j)
                 self.jobs[index] = job
 
     def delete_job(self, job: dict) -> None:
         self.jobs.remove(job)
 
-    # CLIMATE_NODE = "hydroplant/command/floor_1/stage_2/climate_node/LED"
+    def get_topics(self, string: str) -> list[str]:
+        topics = self.topics()
+        result = []
+
+        for topic in topics:
+            if string in topic:
+                result.append(topic)
+        return result
 
     def process_data(self, data: dict) -> None:
-        # ph_threshold = 8
-
+        """here jobs gets added"""
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
 
         # TODO: make sure current state is not matching
         if hour < 21 or hour > 7:
-            topics = get_topics_containing(self.topics, "LED")
+            topics = self.get_topics("LED")
 
             logging.debug(f"{topics=}")
 
@@ -86,7 +92,7 @@ class Autonomy:
                 logging.debug(f"added job {self.jobs=}")
 
         else:
-            topics = get_topics_containing(self.topics, "LED")
+            topics = self.get_topics("LED")
 
             for topic in topics:
                 if "receipt" in topic:
@@ -99,21 +105,6 @@ class Autonomy:
         # moving
 
         # water interval
-
-        # oh no! our ph is too high -> regulate
-        # if is_type("ph", data) and data["value"] > ph_threshold:
-        #     self._set_data_status("checked", data)
-
-        #     wished_data = {"value": 0}
-        #     self.add_job("ph", wished_data)
-
-        #     # self._publish("ph", {"value": 0})
-
-        #     # mark data as checked
-        #     # self._set_data_status("pending", data)
-
-        #     print("msg sent", data)
-        #     # wait for receipt, so we know its done
 
     def _check(self) -> None:
         # we have pending jobs
@@ -147,8 +138,6 @@ class Autonomy:
             # if not topic_contains(topic, "measurement", "receipt"):
             #     # irrelevant -> skip
             #     continue
-
-            logging.debug("here")
 
             if has_status("pending", data):
                 # we have checked this data, but it can have already

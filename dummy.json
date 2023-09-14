@@ -1,0 +1,5 @@
+{
+    "hydroplant/gui_command/floor_1/stage_1/water_node/LED": 1,
+    "hydroplant/gui_command/floor_1/stage_2/water_node/LED": 0,
+    "hydroplant/gui_command/floor_1/stage_3/water_node/LED": 1
+}
