@@ -87,6 +87,10 @@ def get_stages(floor: str, data: dict) -> list[str]:
         A list of stage names in given floor.
     """
     stages = []
+
+    if not data.get(floor):
+        return stages
+
     for i in data[floor]:
         stages.append(i)
     return stages
@@ -180,6 +184,17 @@ def topic_contains(topic: str, *args: str) -> bool:
         Wheter or not the topic contains one or more of the args.
     """
     for arg in args:
+        if not topic:
+            continue
+
         if arg in topic:
             return True
     return False
+
+
+def get_topics_containing(topics: list[str], string: str) -> list[str]:
+    result = []
+    for topic in topics:
+        if string in topic:
+            result.append(topic)
+    return result
