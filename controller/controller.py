@@ -79,6 +79,7 @@ class Controller:
             topic: MQTT topic where message should go
             data: JSON data to be published
         """
+        # TODO: strip message of unnecessary data
         data_string = json.dumps(data)
         logging.debug(f"Sending to {topic} with payload {data_string}")
         self.client.publish(topic, payload=data_string)
@@ -91,6 +92,7 @@ class Controller:
         client.subscribe(DEVICE_TOPIC)
 
         # subscribing to
+        client.subscribe("hydroplant/gui_command/autonomy")
 
         # subscribe to logging
         client.subscribe(LOG_TOPIC)
@@ -115,7 +117,7 @@ class Controller:
 
         logging.debug(f"Got new {last_part} message from {node_id} with payload {data}")
 
-        self.log(1, "received a message!")
+        self.log(0, "received a message!")
 
         if topic_contains(topic, "device"):
             logging.info("Got device message")
@@ -123,6 +125,18 @@ class Controller:
 
         if topic_contains(topic, "gui_command"):
             logging.info("Got command from GUI")
+
+            if "autonomy" in topic:
+                if data["value"]:
+                    self.autonomy.enable()
+                    logging.info("GUI turned autonomy on")
+                    self.log(1, "Autonomy turned on")
+                else:
+                    self.autonomy.disable()
+                    logging.warning("GUI turned autonomy off")
+                    self.log(1, "Autonomy turned off")
+
+                return
 
             actuator_id = get_last_part(topic)
 
@@ -181,6 +195,8 @@ class Controller:
 
             self.client.subscribe(topic=topic)
             self.all_topics.append(topic)
+            # TODO: use master's topics instead
+            self.autonomy.add_topic(topic)
 
             logging.info(f"Subscribed to {topic}")
 
@@ -198,12 +214,15 @@ class Controller:
         if node_id == "gui":
             logging.info("GUI connected")
 
-            # gui_topics = get_all_gui_topics(self.all_topics)
+        # if node_id == "gui":
+        #     logging.info("GUI connected")
 
-            logging.debug(f"{self.all_gui_topics}")
+        #     # gui_topics = get_all_gui_topics(self.all_topics)
 
-            self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
-            return
+        #     logging.debug(f"{self.all_gui_topics}")
+
+        #     self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
+        #     return
 
         floor = get_floor(data)
         stages = get_stages(floor, data)
@@ -227,11 +246,15 @@ class Controller:
                     # log = actuator.format("log")
 
                     master_topics = [gui_command, receipt]
+
                     gui_topics = [gui_command, gui_command_response]
 
                     self.add_topics_and_subscribe(actuator, *master_topics)
 
                     for i in gui_topics:
+                        if i in self.all_gui_topics:
+                            continue
+
                         self.all_gui_topics.append(i)
 
             if sensors:
@@ -244,6 +267,9 @@ class Controller:
                     master_topics = [measurement]
 
                     self.add_topics_and_subscribe(sensor, *master_topics)
+
+        if len(self.all_gui_topics) > 0:
+            self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
 
     def run(self) -> None:
         """Start the master-controller and keep it running
