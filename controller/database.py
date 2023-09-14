@@ -1,6 +1,6 @@
 from .config import DATABASE_HOST, DATABASE_PORT
 
-import time
+import logging
 
 from pymongo import MongoClient, collection
 
@@ -47,9 +47,9 @@ class Database:
         """
         data["node_id"] = node_id
         data["sensor_id"] = sensor_id
-        data["time"] = time.time()
 
         self.measurement.insert_one(data)
+        logging.debug(f"Added to database {data}")
 
     def add_log(self, node_id: str, sensor_id: str, data: dict) -> None:
         """Insert log into database.
@@ -59,22 +59,19 @@ class Database:
         Args:
             node_id: Name of the node.
             sensor_id: Name of the sensor.
-            data: Data which should be added, time will also be added to the logging
-              message.
+            data: Data which should be added message.
         """
         data["node_id"] = node_id
         data["sensor_id"] = sensor_id
-        data["time"] = time.time()
 
         self.logs.insert_one(data)
+        logging.debug(f"Added to database {data}")
 
-    def add_data(self, topic: str, data: dict) -> None:
-        # db = self._get_which_database(topic)
-        return
+    def _get_state(self) -> dict:
+        return self.db.find_one({})
 
-        data["time"] = time.time()
-        db.insert_one(data)
-        print("Data was added to database in collection", db.name)
+    def update_state(self, state: dict) -> None:
+        self.state.replace_one(self._get_state(), state)
 
 
 """
