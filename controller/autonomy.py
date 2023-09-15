@@ -1,4 +1,5 @@
-from .utils import has_status, is_topic, is_type, topic_contains, get_topics_containing
+from .utils import has_status, get_unique_id
+
 import datetime as dt
 import logging
 import time
@@ -10,15 +11,24 @@ class Autonomy:
     Defaults to be enabled.
     """
 
-    def __init__(self, publisher, count: int = 1_000, wait: float = 1.0) -> None:
-        self.topics: list[str] = []  # topics to publish to
-        self.data: list[dict] = []  # data is everything master-controller receives
+    def __init__(
+        self,
+        publisher_callback,
+        topics_callback,
+        state_callback,
+        log_callback,
+        count: int = 1_000,
+        wait: float = 1.0,
+    ) -> None:
+        self.data: list[dict] = []  # specific data master-controller receives
         self.jobs: list[dict] = []  # all pending jobs
         self.count = count  # amount of data autonomy should remember
         self.is_enabled = True  # turn on/off autonomy logic
-        self.publisher = publisher  # callback to communicate with MQTT
+        self.publish = publisher_callback  # callback to communicate with MQTT
+        self.topics = topics_callback  # all topics master knows of
+        self.state = state_callback  # current state of master
+        self.log = log_callback  # current state of master
         self.wait = wait  # how long autonomy should sleep for each cycle
-        self.state = {}  # current state of the system
 
     def enable(self) -> None:
         """Enable the autonomy."""
@@ -28,19 +38,14 @@ class Autonomy:
         """Disable the autonomy."""
         self.is_enabled = False
 
-    def add_topic(self, topic: str) -> None:
-        self.topics.append(topic)
-
     def add_data(self, data: dict) -> None:
         data["status"] = "unchecked"
         self.data.append(data)
         self.data = self.data[-self.count :]  # only keep x latest records
 
-    def update_state(self, state: dict) -> None:
-        self.state = state
-
-    def _publish(self, topic: str, data: dict | list) -> None:
-        self.publisher(topic, data)
+    # def _publish(self, topic: str, data: dict | list) -> None:
+    #     # TODO: get topic master here
+    #     self.publisher(topic, data)
 
     def _delete_data(self, data: dict) -> None:
         self.data.remove(data)
@@ -54,27 +59,47 @@ class Autonomy:
         data = self._set_status(status, data)
         self.data[index] = data
 
-    def replace_job(self, job: dict) -> None:
+    def _replace_job(self, job: dict) -> None:
         for j in self.jobs:
-            if job["time"] == j["time"]:
+            if j["time"] == job["time"]:
                 index = self.jobs.index(j)
                 self.jobs[index] = job
 
-    def delete_job(self, job: dict) -> None:
+    def _delete_job(self, job: dict) -> None:
         self.jobs.remove(job)
 
-    # CLIMATE_NODE = "hydroplant/command/floor_1/stage_2/climate_node/LED"
+    def _get_topics(self, string: str) -> list[str]:
+        topics = self.topics()
+        result = []
 
-    def process_data(self, data: dict) -> None:
-        # ph_threshold = 8
+        for topic in topics:
+            if string in topic:
+                result.append(topic)
+        return result
 
+    def _get_state(self) -> dict:
+        return self.state()
+
+    def _process_data(self, topic: str, data: dict) -> None:
+        """here jobs gets added"""
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
 
         # TODO: make sure current state is not matching
+        unique_id = get_unique_id(topic)
+        state = self._get_state()[unique_id]
+
+        value = data.get("value")
+
+        if value == state:
+            logging.warning("Device already has this value!")
+            self.log(1, "device already has this value!")
+            return
+
         if hour < 21 or hour > 7:
-            topics = get_topics_containing(self.topics, "LED")
+            # gets all LEDs from stages
+            topics = self._get_topics("LED")
 
             logging.debug(f"{topics=}")
 
@@ -82,17 +107,17 @@ class Autonomy:
                 if "receipt" in topic:
                     continue
 
-                self.add_job(topic, {"value": 1})
+                self._add_job(topic, {"value": 1})
                 logging.debug(f"added job {self.jobs=}")
 
         else:
-            topics = get_topics_containing(self.topics, "LED")
+            topics = self._get_topics("LED")
 
             for topic in topics:
                 if "receipt" in topic:
                     continue
 
-                self.add_job(topic, {"value": 0})
+                self._add_job(topic, {"value": 0})
 
         # lights
 
@@ -100,31 +125,19 @@ class Autonomy:
 
         # water interval
 
-        # oh no! our ph is too high -> regulate
-        # if is_type("ph", data) and data["value"] > ph_threshold:
-        #     self._set_data_status("checked", data)
-
-        #     wished_data = {"value": 0}
-        #     self.add_job("ph", wished_data)
-
-        #     # self._publish("ph", {"value": 0})
-
-        #     # mark data as checked
-        #     # self._set_data_status("pending", data)
-
-        #     print("msg sent", data)
-        #     # wait for receipt, so we know its done
+        # the data goes from unchecked -> checked
+        self._set_data_status("checked", data)
 
     def _check(self) -> None:
         # we have pending jobs
         for job in self.jobs:
             if has_status("queued", job):
                 # publish message and set to pending
-                self._publish(job["topic"], job)
+                self.publish(job["topic"], job)
 
                 # we published, now a pending job
                 pending_job = self._set_status("pending", job)
-                self.replace_job(pending_job)
+                self._replace_job(pending_job)
 
                 # we continue to save a couple of ms
 
@@ -136,7 +149,7 @@ class Autonomy:
 
             if has_status("done", job):
                 # job is done,
-                self.delete_job(job)
+                self._delete_job(job)
 
         # check all data we know of, reversed since newest gets appended
         self.data = [{}]
@@ -148,12 +161,10 @@ class Autonomy:
             #     # irrelevant -> skip
             #     continue
 
-            logging.debug("here")
-
-            if has_status("pending", data):
+            if has_status("checked", data):
                 # we have checked this data, but it can have already
                 # been done or not, we need to check
-                if "done":
+                if False:
                     self._set_data_status("done", data)
 
             if has_status("done", data):
@@ -162,10 +173,10 @@ class Autonomy:
                 continue  # done with this data
 
             # -> data is unchecked
-            # we might need to check it
-            self.process_data(data)
+            # we need to check it
+            self._process_data(topic, data)
 
-    def add_job(self, topic: str, data: dict) -> None:
+    def _add_job(self, topic: str, data: dict) -> None:
         data["topic"] = topic
         data["time"] = time.time()
         data["status"] = "queued"
