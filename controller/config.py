@@ -8,3 +8,4 @@ DATABASE_PORT = 27017
 
 # specifics
 AUTONOMY_SLEEP = 10
+DISALLOWED_KEYS = ["time", "status", "topic"]  # limit payload bandwidth

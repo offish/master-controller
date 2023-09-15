@@ -1,13 +1,16 @@
+PREFIX = "hydroplant/"
+
 # mqtt topics
 # sub
-DEVICE_TOPIC = "hydroplant/device"
-LOG_TOPIC = "hydroplant/log"
-SYNC_TOPIC = "hydroplant/gui/sync"
-AUTONOMY_TOPIC = "hydroplant/gui_command/autonomy"
+DEVICE_TOPIC = PREFIX + "device"
+LOG_TOPIC = PREFIX + "log"
+SYNC_TOPIC = PREFIX + "gui/sync"
+AUTONOMY_TOPIC = PREFIX + "gui_command/autonomy"
 
 # pub
-GUI_TOPICS = "hydroplant/gui/topics"
-READY_TOPIC = "hydroplant/ready"
+GUI_TOPICS = PREFIX + "gui/topics"
+READY_TOPIC = PREFIX + "ready"
 
-# payload specific
-DISALLOWED_KEYS = ["time", "status", "topic"]
+# commonly used
+GUI_COMMAND = PREFIX + "gui_command/"
+GUI_LOG = PREFIX + "gui/log"

@@ -1,4 +1,4 @@
-from .utils import has_status
+from .utils import has_status, get_unique_id
 
 import datetime as dt
 import logging
@@ -12,7 +12,12 @@ class Autonomy:
     """
 
     def __init__(
-        self, publisher_callback, topics_callback, count: int = 1_000, wait: float = 1.0
+        self,
+        publisher_callback,
+        topics_callback,
+        state_callback,
+        count: int = 1_000,
+        wait: float = 1.0,
     ) -> None:
         self.data: list[dict] = []  # data is everything master-controller receives
         self.jobs: list[dict] = []  # all pending jobs
@@ -20,8 +25,8 @@ class Autonomy:
         self.is_enabled = True  # turn on/off autonomy logic
         self.publisher = publisher_callback  # callback to communicate with MQTT
         self.topics = topics_callback  # all topics master knows of
+        self.state = state_callback  # current state of master
         self.wait = wait  # how long autonomy should sleep for each cycle
-        self.state = {}  # current state of the system
 
     def enable(self) -> None:
         """Enable the autonomy."""
@@ -35,9 +40,6 @@ class Autonomy:
         data["status"] = "unchecked"
         self.data.append(data)
         self.data = self.data[-self.count :]  # only keep x latest records
-
-    def update_state(self, state: dict) -> None:
-        self.state = state
 
     def _publish(self, topic: str, data: dict | list) -> None:
         self.publisher(topic, data)
@@ -72,13 +74,19 @@ class Autonomy:
                 result.append(topic)
         return result
 
-    def process_data(self, data: dict) -> None:
+    def _get_state(self) -> dict:
+        return self.state()
+
+    def process_data(self, topic: str, data: dict) -> None:
         """here jobs gets added"""
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
 
         # TODO: make sure current state is not matching
+        unique_id = get_unique_id(topic)
+        state = self._get_state()
+
         if hour < 21 or hour > 7:
             topics = self.get_topics("LED")
 
@@ -105,6 +113,9 @@ class Autonomy:
         # moving
 
         # water interval
+
+        # the data goes from unchecked -> checked
+        self._set_data_status("checked", data)
 
     def _check(self) -> None:
         # we have pending jobs
@@ -139,10 +150,10 @@ class Autonomy:
             #     # irrelevant -> skip
             #     continue
 
-            if has_status("pending", data):
+            if has_status("checked", data):
                 # we have checked this data, but it can have already
                 # been done or not, we need to check
-                if "done":
+                if False:
                     self._set_data_status("done", data)
 
             if has_status("done", data):
@@ -152,7 +163,7 @@ class Autonomy:
 
             # -> data is unchecked
             # we might need to check it
-            self.process_data(data)
+            self.process_data(topic, data)
 
     def add_job(self, topic: str, data: dict) -> None:
         data["topic"] = topic

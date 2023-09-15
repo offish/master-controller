@@ -9,6 +9,7 @@ class Database:
     def __init__(self, host: str = DATABASE_HOST, port: int = DATABASE_PORT) -> None:
         self._client = MongoClient(host=host, port=port)
         self.db = self._client["hydroplant"]
+        logging.info("Connected to database")
 
         self.measurement = self.db["measurements"]
         self.actuator = self.db["actuator"]
@@ -49,7 +50,7 @@ class Database:
         data["sensor_id"] = sensor_id
 
         self.measurement.insert_one(data)
-        logging.debug(f"Added to database {data}")
+        logging.debug(f"Added to measurement {data=}")
 
     def add_log(self, node_id: str, sensor_id: str, data: dict) -> None:
         """Insert log into database.
@@ -65,13 +66,15 @@ class Database:
         data["sensor_id"] = sensor_id
 
         self.logs.insert_one(data)
-        logging.debug(f"Added to database {data}")
+        logging.debug(f"Added to logs {data=}")
 
-    def _get_state(self) -> dict:
+    def get_state(self) -> dict:
         return self.db.find_one({})
 
     def update_state(self, state: dict) -> None:
-        self.state.replace_one(self._get_state(), state)
+        data = self.get_state()
+        self.state.replace_one(data, state)
+        logging.debug(f"Updated state from {data=} to {state=}")
 
 
 """

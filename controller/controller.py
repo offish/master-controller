@@ -1,20 +1,15 @@
 from .database import Database
-from .config import (
-    BROKER_HOST,
-    BROKER_PORT,
-    AUTONOMY_SLEEP,
-)
+from .config import BROKER_HOST, BROKER_PORT, AUTONOMY_SLEEP, DISALLOWED_KEYS
 from .topics import *
 from .utils import (
     get_last_part,
     get_second_last_part,
-    # get_device_topic,
-    # get_all_gui_topics,
     get_floor,
     get_stages,
     get_floor_from_topic,
     get_stage_from_topic,
     topic_contains,
+    get_unique_id,
 )
 from .autonomy import Autonomy
 
@@ -38,21 +33,41 @@ class Controller:
         self.autonomy = Autonomy(
             publisher_callback=self.publisher,
             topics_callback=self.get_topics,
+            state_callback=self.get_state,
             wait=AUTONOMY_SLEEP,
         )
-        self.all_gui_topics = []
-        self.all_topics = []
-        self.all_devices = []
-        self.state = {}
+        self.all_gui_topics: list[str] = []
+        self.all_topics: list[str] = []
+        self.all_devices: list[str] = []
+        self.state = {}  # overview of all states, unique_id: value
 
-    def update_state(self, last_part: str, data: dict) -> None:
-        self.state[last_part] = data["value"]
+    def get_gui_formatted_states(self) -> list[dict]:
+        # TODO: only send parts at a time, not the whole thing
+        # everytime, due to mqtt message size
+        gui_formatted = {}
+
+        for key, value in self.state.items():
+            gui_formatted[GUI_COMMAND + key] = value
+
+        # {"hydroplant/gui_command/floor_1/stage_1/climate_node/LED": 1}
+        return gui_formatted
+
+    def update_and_publish_state(self, topic: str, data: dict) -> None:
+        # unique id is floor_1/stage_1/climate_node/LED
+        unique_id = get_unique_id(topic)
+
+        self.state[unique_id] = data["value"]
         self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
+        # TODO: test publishing to gui
+        self._publish(SYNC_TOPIC, self.get_gui_formatted_states)
 
     def get_topics(self) -> list[str]:
         """Function for autonomy to get all existing topics."""
         return self.all_topics
+
+    def get_state(self) -> dict:
+        return self.state
 
     def publisher(self, topic: str, data: dict | list) -> None:
         """Function for the autonomy to communicate with MQTT."""
@@ -65,7 +80,7 @@ class Controller:
             "device_id": "master-controller",
             "floor": "floor_100",
         }
-        self._publish("hydroplant/gui/log", log)
+        self._publish(GUI_LOG, log)
 
     def _publish(self, topic: str, data: dict | list) -> None:
         """Publish a message to a topic over MQTT.
@@ -78,10 +93,15 @@ class Controller:
         """
         # strip message for unnecessary data
         # this is done to save bandwidth over mqtt
+
         if isinstance(data, dict):
+            copy = data.copy()
             for key in data:
                 if key in DISALLOWED_KEYS:
-                    del data[key]
+                    del copy[key]
+            # or else runtimeerror
+            # changing size while iterating
+            data = copy
 
         serialized_data = json.dumps(data)
         logging.debug(f"Sending to {topic} with payload {serialized_data}")
@@ -125,7 +145,7 @@ class Controller:
         if topic_contains(topic, "gui_command"):
             logging.info("Got command from GUI")
 
-            if "autonomy" in topic:
+            if topic == AUTONOMY_TOPIC:
                 if data["value"]:
                     self.autonomy.enable()
                     logging.info("GUI turned autonomy on")
@@ -138,7 +158,6 @@ class Controller:
                 return
 
             actuator_id = get_last_part(topic)
-
             floor = get_floor_from_topic(topic)
             stage = get_stage_from_topic(topic)
 
@@ -157,10 +176,16 @@ class Controller:
 
             inform_autonomy = True
 
+        # check receipt
+        if topic_contains(topic, "receipt"):
+            logging.info("Got a receipt")
+            self.update_and_publish_state(topic, data)
+
+        # TODO: remove this? not going to be used anymore?
         # actuator activity, on or off
-        if topic_contains(topic, "activity"):
-            logging.info("Got new actuator action")
-            self.update_state(last_part, data)
+        # if topic_contains(topic, "activity"):
+        #     logging.info("Got new actuator action")
+        #     self.update_state(last_part, data)
 
         # sensor measurement
         if topic_contains(topic, "measurement"):
@@ -218,7 +243,7 @@ class Controller:
             actuators = data[floor][stage].get("actuators")
             sensors = data[floor][stage].get("sensors")
 
-            device = "hydroplant/{}/" + f"{floor}/{stage}/{node_id}/"
+            device = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
 
             if actuators:
                 for actuator_id in actuators:
@@ -253,11 +278,7 @@ class Controller:
 
         dummy_data = json.loads(open("./dummy.json", "r").read())
 
-        for key in dummy_data:
-            synced = {}
-            synced[key] = dummy_data[key]
-            print(synced)
-            self._publish(SYNC_TOPIC, synced)
+        self._publish(SYNC_TOPIC, dummy_data)
 
     def run(self) -> None:
         """Start the master-controller and keep it running
@@ -266,6 +287,9 @@ class Controller:
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)
+
+        # TODO: get state from db on startup
+        # self.state = self.db.get_state()
 
         logging.debug("Starting MQTT loop")
         communication = Thread(target=self.client.loop_forever)

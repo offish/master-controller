@@ -198,3 +198,19 @@ def get_topics_containing(topics: list[str], string: str) -> list[str]:
         if string in topic:
             result.append(topic)
     return result
+
+
+def get_unique_id(topic: str) -> str:
+    # from receipt
+    # hydroplant/<something>/floor_1/stage_1/climate_node/LED
+    # unsure which topic
+    floor = get_floor_from_topic(topic)
+    stage = get_stage_from_topic(topic)
+    node = get_second_last_part(topic)
+    part = get_last_part(topic)
+
+    # floor_1/stage_1/climate_node/LED
+    unqiue_id = "/".join([floor, stage, node, part])
+    # logging.debug(f"{unqiue_id=}")
+
+    return unqiue_id
