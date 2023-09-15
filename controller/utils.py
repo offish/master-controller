@@ -201,11 +201,20 @@ def get_topics_containing(topics: list[str], string: str) -> list[str]:
 
 
 def get_unique_id(topic: str) -> str:
+    """Creats a unique id given topic.
+
+    Args:
+        topic: MQTT topic string
+
+    Returns:
+        The unique id to be used. E.g. `floor_1/stage_1/climate_node/LED`
+    """
     # from receipt
     # hydroplant/<something>/floor_1/stage_1/climate_node/LED
     # unsure which topic
     floor = get_floor_from_topic(topic)
     stage = get_stage_from_topic(topic)
+    # TODO: use index for node and part
     node = get_second_last_part(topic)
     part = get_last_part(topic)
 

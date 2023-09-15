@@ -34,6 +34,7 @@ class Controller:
             publisher_callback=self.publisher,
             topics_callback=self.get_topics,
             state_callback=self.get_state,
+            log_callback=self.log,
             wait=AUTONOMY_SLEEP,
         )
         self.all_gui_topics: list[str] = []
@@ -46,7 +47,12 @@ class Controller:
         # everytime, due to mqtt message size
         gui_formatted = {}
 
+        if not self.state:
+            return []
+
         for key, value in self.state.items():
+            # gui does not want this
+            key = key.replace("/receipt", "")
             gui_formatted[GUI_COMMAND + key] = value
 
         # {"hydroplant/gui_command/floor_1/stage_1/climate_node/LED": 1}
@@ -54,13 +60,15 @@ class Controller:
 
     def update_and_publish_state(self, topic: str, data: dict) -> None:
         # unique id is floor_1/stage_1/climate_node/LED
+        # TODO: handle this better
+        topic = topic.replace("/receipt", "")
         unique_id = get_unique_id(topic)
 
         self.state[unique_id] = data["value"]
-        self.autonomy.update_state(self.state)
+        # self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
         # TODO: test publishing to gui
-        self._publish(SYNC_TOPIC, self.get_gui_formatted_states)
+        self._publish(SYNC_TOPIC, self.get_gui_formatted_states())
 
     def get_topics(self) -> list[str]:
         """Function for autonomy to get all existing topics."""
@@ -93,7 +101,6 @@ class Controller:
         """
         # strip message for unnecessary data
         # this is done to save bandwidth over mqtt
-
         if isinstance(data, dict):
             copy = data.copy()
             for key in data:
@@ -102,6 +109,8 @@ class Controller:
             # or else runtimeerror
             # changing size while iterating
             data = copy
+
+        print(f"{data=}")
 
         serialized_data = json.dumps(data)
         logging.debug(f"Sending to {topic} with payload {serialized_data}")
@@ -276,9 +285,10 @@ class Controller:
         if len(self.all_gui_topics) > 0:
             self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
 
-        dummy_data = json.loads(open("./dummy.json", "r").read())
+        states = self.get_gui_formatted_states()
 
-        self._publish(SYNC_TOPIC, dummy_data)
+        if states:
+            self._publish(SYNC_TOPIC, states)
 
     def run(self) -> None:
         """Start the master-controller and keep it running
@@ -288,8 +298,7 @@ class Controller:
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)
 
-        # TODO: get state from db on startup
-        # self.state = self.db.get_state()
+        self.state = self.db.get_state()
 
         logging.debug("Starting MQTT loop")
         communication = Thread(target=self.client.loop_forever)

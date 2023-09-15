@@ -69,10 +69,24 @@ class Database:
         logging.debug(f"Added to logs {data=}")
 
     def get_state(self) -> dict:
-        return self.db.find_one({})
+        result = self.state.find_one({})
+
+        if not result:
+            result = {}
+
+        # mongo db adds this
+        del result["_id"]
+
+        return result
 
     def update_state(self, state: dict) -> None:
         data = self.get_state()
+
+        # only the case if collection is empty
+        if not data:
+            self.state.insert_one(state)
+            return
+
         self.state.replace_one(data, state)
         logging.debug(f"Updated state from {data=} to {state=}")
 
