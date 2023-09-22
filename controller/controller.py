@@ -177,24 +177,14 @@ class Controller:
             data["stage"] = stage
 
             inform_autonomy = True
-
             self._publish(topic=command_topic, data=data)
-
-        if topic_contains(topic, "receipt"):
-            logging.info("Got a receipt")
-
-            inform_autonomy = True
 
         # check receipt
         if topic_contains(topic, "receipt"):
             logging.info("Got a receipt")
-            self.update_and_publish_state(topic, data)
 
-        # TODO: remove this? not going to be used anymore?
-        # actuator activity, on or off
-        # if topic_contains(topic, "activity"):
-        #     logging.info("Got new actuator action")
-        #     self.update_state(last_part, data)
+            self.update_and_publish_state(topic, data)
+            inform_autonomy = True
 
         # sensor measurement
         if topic_contains(topic, "measurement"):

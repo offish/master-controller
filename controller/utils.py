@@ -1,3 +1,6 @@
+import logging
+
+
 def get_last_part(topic: str) -> str:
     """Gets the last part of a topic string, usually the `sensor_id`
 
@@ -108,6 +111,7 @@ def get_stage_from_topic(topic: str) -> str:
         The stage as a string. E.g stage_1
     """
     topics = topic.split("/")
+
     for i in topics:
         if "stage" in i:
             return i
@@ -126,6 +130,7 @@ def get_floor_from_topic(topic: str) -> str:
         The floor as a string. E.g floor_1
     """
     topics = topic.split("/")
+
     for i in topics:
         if "floor" in i:
             return i
@@ -194,6 +199,7 @@ def topic_contains(topic: str, *args: str) -> bool:
 
 def get_topics_containing(topics: list[str], string: str) -> list[str]:
     result = []
+
     for topic in topics:
         if string in topic:
             result.append(topic)
@@ -212,14 +218,31 @@ def get_unique_id(topic: str) -> str:
     # from receipt
     # hydroplant/<something>/floor_1/stage_1/climate_node/LED
     # unsure which topic
+    parts = topic.split("/")
     floor = get_floor_from_topic(topic)
+
+    assert floor != "", "Topic must include floor!"
+
     stage = get_stage_from_topic(topic)
-    # TODO: use index for node and part
-    node = get_second_last_part(topic)
-    part = get_last_part(topic)
+
+    offset = 1
+
+    if stage:
+        offset = 2
+
+    floor_index = parts.index(floor)
+    node = parts[floor_index + offset]
+    part = parts[floor_index + offset + 1]
 
     # floor_1/stage_1/climate_node/LED
     unqiue_id = "/".join([floor, stage, node, part])
-    # logging.debug(f"{unqiue_id=}")
+    logging.debug(f"{unqiue_id=}")
 
     return unqiue_id
+
+
+def get_data_type(topic: str) -> str:
+    for data_type in ["command", "measurement", "receipt"]:
+        if data_type in topic:
+            return data_type
+    return ""
