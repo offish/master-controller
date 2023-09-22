@@ -1,4 +1,4 @@
-from .utils import has_status, get_unique_id
+from .utils import has_status, get_unique_id, get_last_part, get_data_type
 
 import datetime as dt
 import logging
@@ -43,10 +43,6 @@ class Autonomy:
         self.data.append(data)
         self.data = self.data[-self.count :]  # only keep x latest records
 
-    # def _publish(self, topic: str, data: dict | list) -> None:
-    #     # TODO: get topic master here
-    #     self.publisher(topic, data)
-
     def _delete_data(self, data: dict) -> None:
         self.data.remove(data)
 
@@ -80,22 +76,13 @@ class Autonomy:
     def _get_state(self) -> dict:
         return self.state()
 
-    def _process_data(self, topic: str, data: dict) -> None:
-        """here jobs gets added"""
+    def _check_lights(self):
+        # TODO: rewrite to if-check time, turn lights
+        # only on/off if they dont match state and
+        # make function for adding jobs
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
-
-        # TODO: make sure current state is not matching
-        unique_id = get_unique_id(topic)
-        state = self._get_state()[unique_id]
-
-        value = data.get("value")
-
-        if value == state:
-            logging.warning("Device already has this value!")
-            self.log(1, "device already has this value!")
-            return
 
         if hour < 21 or hour > 7:
             # gets all LEDs from stages
@@ -119,11 +106,58 @@ class Autonomy:
 
                 self._add_job(topic, {"value": 0})
 
+    def _check_water(self):
+        pass
+
+    def _check_interval_jobs(self):
+        self._check_lights()
+        self._check_water()
+
+    def _process_measurement(self, topic: str, data: dict) -> None:
+        unique_id = get_unique_id(topic)
+        current_value = self._get_state()[unique_id]
+
+        value = data.get("value")
+
+        # TODO: make sure current state is not matching
+        if value == current_value:
+            logging.warning("Device already has this value!")
+            self.log(1, "device already has this value!")
+            return
+
         # lights
 
         # moving
 
         # water interval
+
+        pass
+
+    def _process_data(self, topic: str, data: dict) -> None:
+        """here jobs gets added"""
+        # topic:
+
+        data_type = get_data_type(topic)
+
+        if not data_type:
+            return
+
+        # measurement -> camera -> move
+        # receipt -> delete
+        # command -> do
+
+        match data_type:
+            # case "command":
+            #     self._process_command(topic, data)
+            #     pass
+
+            case "measurement":
+                self._process_measurement(topic, data)
+                pass
+
+            case "receipt":
+                # self._process_receipt(topic,data)
+                pass
 
         # the data goes from unchecked -> checked
         self._set_data_status("checked", data)
@@ -172,6 +206,7 @@ class Autonomy:
                 self._delete_data(data)
                 continue  # done with this data
 
+            self._check_interval_jobs()
             # -> data is unchecked
             # we need to check it
             self._process_data(topic, data)
