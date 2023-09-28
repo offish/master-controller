@@ -28,7 +28,9 @@ class Controller:
     """
 
     def __init__(self) -> None:
-        self.client = mqtt.Client(client_id="master")
+        self.client = mqtt.Client(client_id="master_controller")
+        self.client.will_set(MASTER_DISCONNECT_TOPIC, "")
+
         self.db = Database()
         self.autonomy = Autonomy(
             publisher_callback=self.publisher,
@@ -41,6 +43,10 @@ class Controller:
         self.all_topics: list[str] = []
         self.all_devices: list[str] = []
         self.state = {}  # overview of all states, unique_id: value
+
+    @staticmethod
+    def __json_to_str(data: dict | list) -> str:
+        return json.dumps(data)
 
     def get_gui_formatted_states(self) -> list[dict]:
         # TODO: only send parts at a time, not the whole thing
@@ -85,7 +91,7 @@ class Controller:
         log = {
             "level": level,
             "message": message,
-            "device_id": "master-controller",
+            "device_id": "master_controller",
             "floor": "floor_100",
         }
         self._publish(GUI_LOG, log)
@@ -110,11 +116,8 @@ class Controller:
             # changing size while iterating
             data = copy
 
-        print(f"{data=}")
-
-        serialized_data = json.dumps(data)
-        logging.debug(f"Sending to {topic} with payload {serialized_data}")
-        self.client.publish(topic, payload=serialized_data)
+        logging.debug(f"Sending to {topic} with payload {data}")
+        self.client.publish(topic, payload=self.__json_to_str(data))
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         """Handles MQTT connection to broker and subscribes to needed topics."""
@@ -126,12 +129,24 @@ class Controller:
         # subscribing to
         client.subscribe(AUTONOMY_TOPIC)
 
+        client.subscribe(IS_READY_TOPIC)
+
+        # to catch when devices disconnects
+        # TODO: handle disconnects and unsub from topics?
+        client.subscribe(DEVICES_DISCONNECT_TOPIC)
+
+        client.subscribe(TEMP_TEST_TOPIC)
+
         # subscribe to logging
         client.subscribe(LOG_TOPIC)
 
     def on_message(self, client, userdata, msg) -> None:
         """Handles MQTT messages."""
         topic: str = msg.topic
+
+        if not msg.payload:
+            msg.payload = "{}"
+
         data: dict = json.loads(msg.payload)
 
         inform_autonomy = False
@@ -146,6 +161,19 @@ class Controller:
         logging.debug(f"Got new {last_part} message from {node_id} with payload {data}")
 
         self.log(0, "received a message!")
+
+        # device wants to know if we are online
+        if topic_contains(topic, "is_ready"):
+            # publish we are ready
+            self._publish(READY_TOPIC, "")
+            return
+
+        if topic_contains(topic, "disconnected"):
+            device_id = data["device_id"]
+
+            logging.warning(f"{device_id} disconnected")
+            self.log(1, f"{device_id} disconnected")
+            return
 
         if topic_contains(topic, "device"):
             logging.info("Got device message")

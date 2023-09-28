@@ -17,8 +17,9 @@ python3 main.py
 
 ## Run GitHub Actions
 ```bash
+# @hydro-plant-web-server
 # actions-runner/
-sudo nohup ./run.sh &
+nohup ./run.sh &
 ```
 
 ## Documentation
