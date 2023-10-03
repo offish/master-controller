@@ -13,7 +13,7 @@ class Autonomy:
 
     def __init__(
         self,
-        publisher_callback,
+        publish_callback,
         topics_callback,
         state_callback,
         log_callback,
@@ -24,7 +24,7 @@ class Autonomy:
         self.jobs: list[dict] = []  # all pending jobs
         self.count = count  # amount of data autonomy should remember
         self.is_enabled = True  # turn on/off autonomy logic
-        self.publish = publisher_callback  # callback to communicate with MQTT
+        self.publish = publish_callback  # callback to communicate with MQTT
         self.topics = topics_callback  # all topics master knows of
         self.state = state_callback  # current state of master
         self.log = log_callback  # current state of master
@@ -185,9 +185,9 @@ class Autonomy:
                 # job is done,
                 self._delete_job(job)
 
-        # check all data we know of, reversed since newest gets appended
         self.data = [{}]
 
+        # check all data we know of, reversed since newest gets appended
         for data in reversed(self.data):
             topic = data.get("topic")
 

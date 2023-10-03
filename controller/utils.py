@@ -227,6 +227,7 @@ def get_unique_id(topic: str) -> str:
 
     offset = 1
 
+    # we might not have stage
     if stage:
         offset = 2
 

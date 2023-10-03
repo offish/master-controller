@@ -8,7 +8,7 @@ SYNC_TOPIC = PREFIX + "gui/sync"
 AUTONOMY_TOPIC = PREFIX + "gui_command/autonomy"
 DEVICES_DISCONNECT_TOPIC = PREFIX + "disconnected/devices"
 IS_READY_TOPIC = PREFIX + "is_ready"
-TEMP_TEST_TOPIC = PREFIX + "measurement/#"
+# TEMP_TEST_TOPIC = PREFIX + "measurement/#"
 
 # pub
 GUI_TOPICS = PREFIX + "gui/topics"

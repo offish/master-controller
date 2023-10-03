@@ -33,7 +33,7 @@ class Controller:
 
         self.db = Database()
         self.autonomy = Autonomy(
-            publisher_callback=self.publisher,
+            publish_callback=self.publish,
             topics_callback=self.get_topics,
             state_callback=self.get_state,
             log_callback=self.log,
@@ -74,7 +74,7 @@ class Controller:
         # self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
         # TODO: test publishing to gui
-        self._publish(SYNC_TOPIC, self.get_gui_formatted_states())
+        self.publish(SYNC_TOPIC, self.get_gui_formatted_states())
 
     def get_topics(self) -> list[str]:
         """Function for autonomy to get all existing topics."""
@@ -83,9 +83,9 @@ class Controller:
     def get_state(self) -> dict:
         return self.state
 
-    def publisher(self, topic: str, data: dict | list) -> None:
-        """Function for the autonomy to communicate with MQTT."""
-        self._publish(topic, data)
+    # def publisher(self, topic: str, data: dict | list) -> None:
+    #     """Function for the autonomy to communicate with MQTT."""
+    #     self._publish(topic, data)
 
     def log(self, level: int, message: str) -> None:
         log = {
@@ -94,9 +94,9 @@ class Controller:
             "device_id": "master_controller",
             "floor": "floor_100",
         }
-        self._publish(GUI_LOG, log)
+        self.publish(GUI_LOG, log)
 
-    def _publish(self, topic: str, data: dict | list) -> None:
+    def publish(self, topic: str, data: dict | list) -> None:
         """Publish a message to a topic over MQTT.
 
         Takes a JSON input and turns it into a string to be able to send.
@@ -110,14 +110,45 @@ class Controller:
         if isinstance(data, dict):
             copy = data.copy()
             for key in data:
-                if key in DISALLOWED_KEYS:
-                    del copy[key]
+                if key not in DISALLOWED_KEYS:
+                    continue
+
+                del copy[key]
             # or else runtimeerror
             # changing size while iterating
             data = copy
 
         logging.debug(f"Sending to {topic} with payload {data}")
         self.client.publish(topic, payload=self.__json_to_str(data))
+
+    def __handle_gui_command(self, topic: str, data: dict) -> bool:
+        # turn on or off autonomy from gui
+        if topic == AUTONOMY_TOPIC:
+            if data["value"]:
+                self.autonomy.enable()
+                logging.info("GUI turned autonomy on")
+                self.log(1, "Autonomy turned on")
+            else:
+                self.autonomy.disable()
+                logging.warning("GUI turned autonomy off")
+                self.log(1, "Autonomy turned off")
+
+            # no need to inform autonomy
+            # it already knows its own state
+            return False
+
+        actuator_id = get_last_part(topic)
+        floor = get_floor_from_topic(topic)
+        stage = get_stage_from_topic(topic)
+
+        command_topic = topic.replace("gui_command", "command")
+
+        data["id"] = actuator_id
+        data["floor"] = floor
+        data["stage"] = stage
+
+        self.publish(topic=command_topic, data=data)
+        return True  # inform autonomy
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         """Handles MQTT connection to broker and subscribes to needed topics."""
@@ -135,7 +166,7 @@ class Controller:
         # TODO: handle disconnects and unsub from topics?
         client.subscribe(DEVICES_DISCONNECT_TOPIC)
 
-        client.subscribe(TEMP_TEST_TOPIC)
+        # client.subscribe(TEMP_TEST_TOPIC)
 
         # subscribe to logging
         client.subscribe(LOG_TOPIC)
@@ -165,12 +196,12 @@ class Controller:
         # device wants to know if we are online
         if topic_contains(topic, "is_ready"):
             # publish we are ready
-            self._publish(READY_TOPIC, "")
+            self.publish(READY_TOPIC, "")
             return
 
         if topic_contains(topic, "disconnected"):
             device_id = data["device_id"]
-
+            # TODO: unsub?
             logging.warning(f"{device_id} disconnected")
             self.log(1, f"{device_id} disconnected")
             return
@@ -182,30 +213,7 @@ class Controller:
         if topic_contains(topic, "gui_command"):
             logging.info("Got command from GUI")
 
-            if topic == AUTONOMY_TOPIC:
-                if data["value"]:
-                    self.autonomy.enable()
-                    logging.info("GUI turned autonomy on")
-                    self.log(1, "Autonomy turned on")
-                else:
-                    self.autonomy.disable()
-                    logging.warning("GUI turned autonomy off")
-                    self.log(1, "Autonomy turned off")
-
-                return
-
-            actuator_id = get_last_part(topic)
-            floor = get_floor_from_topic(topic)
-            stage = get_stage_from_topic(topic)
-
-            command_topic = topic.replace("gui_command", "command")
-
-            data["id"] = actuator_id
-            data["floor"] = floor
-            data["stage"] = stage
-
-            inform_autonomy = True
-            self._publish(topic=command_topic, data=data)
+            inform_autonomy = self.__handle_gui_command(topic, data)
 
         # check receipt
         if topic_contains(topic, "receipt"):
@@ -222,12 +230,10 @@ class Controller:
             self.db.add_measurement(node_id, sensor_id, data)
             inform_autonomy = True
 
-        # if "log" in topic:
-        #     sensor_id = get_last_part(topic)
-        #     self.db.add_log(node_id, sensor_id, data)
+        if not inform_autonomy:
+            return
 
-        if inform_autonomy:
-            self.autonomy.add_data({"topic": topic, "type": last_part, **data})
+        self.autonomy.add_data({"topic": topic, "type": last_part, **data})
 
     def add_topics_and_subscribe(self, device: str, *args) -> None:
         """Adds topics to global lists of all topics and devices, and
@@ -237,7 +243,7 @@ class Controller:
             device: A device topic which must be formattable
             *args: Strings which also should be subscribed to
         """
-        if not device in self.all_devices:
+        if device not in self.all_devices:
             self.all_devices.append(device)
 
         for topic in args:
@@ -248,6 +254,65 @@ class Controller:
             self.all_topics.append(topic)
 
             logging.info(f"Subscribed to {topic}")
+
+    def __handle_device_present(self, data: dict, node_id: str) -> None:
+        floor = get_floor(data)
+
+        logic_controllers = data[floor].get("logic_controllers", [])
+
+        for logic_controller_id in logic_controllers:
+            logic_controller = (
+                PREFIX + "{}/" + f"{floor}/{node_id}/{logic_controller_id}"
+            )
+
+            command = logic_controller.format("gui_command")
+            receipt = command + "/receipt"
+
+            self.add_topics_and_subscribe(logic_controller, *[command, receipt])
+            self.all_gui_topics.append(command)
+
+        if logic_controllers:
+            del data[floor]["logic_controllers"]
+
+        stages = get_stages(floor, data)
+
+        # TODO: fix this whole function, really ugly and hard to read
+
+        logging.debug(f"{data=}")
+
+        for stage in stages:
+            actuators = data[floor][stage].get("actuators", [])
+            sensors = data[floor][stage].get("sensors", [])
+
+            device = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+
+            for actuator_id in actuators:
+                actuator = device + actuator_id
+
+                gui_command = actuator.format("gui_command")
+                receipt = actuator.format("command") + "/receipt"
+
+                master_topics = [gui_command, receipt]
+                gui_topics = [gui_command]
+
+                self.add_topics_and_subscribe(actuator, *master_topics)
+
+                # TODO: fix this
+
+                for i in gui_topics:
+                    if i in self.all_gui_topics:
+                        continue
+
+                    self.all_gui_topics.append(i)
+
+            for sensor_id in sensors:
+                sensor = device + sensor_id
+
+                measurement = sensor.format("sensor/measurement")
+
+                master_topics = [measurement]
+
+                self.add_topics_and_subscribe(sensor, *master_topics)
 
     def setup_device(self, data: dict) -> None:
         """Setups device given data.
@@ -262,51 +327,31 @@ class Controller:
 
         if node_id == "gui":
             logging.info("GUI connected")
+            # gui doesnt have interesting data for us
 
-        floor = get_floor(data)
-        stages = get_stages(floor, data)
+        else:
+            # other nodes has interesting data
+            self.__handle_device_present(data, node_id)
 
-        for stage in stages:
-            actuators = data[floor][stage].get("actuators")
-            sensors = data[floor][stage].get("sensors")
+        # update gui with all topics (will only happen when something connects)
+        self.__publish_gui_topics()
 
-            device = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+        # sync new gui states (will only happen when something connects)
+        self.__publish_gui_states()
 
-            if actuators:
-                for actuator_id in actuators:
-                    actuator = device + actuator_id
+    def __publish_gui_topics(self) -> None:
+        if len(self.all_gui_topics) == 0:
+            return
 
-                    gui_command = actuator.format("gui_command")
-                    receipt = actuator.format("command") + "/receipt"
+        self.publish(GUI_TOPICS, {"topics": self.all_gui_topics})
 
-                    master_topics = [gui_command, receipt]
-                    gui_topics = [gui_command]
-
-                    self.add_topics_and_subscribe(actuator, *master_topics)
-
-                    for i in gui_topics:
-                        if i in self.all_gui_topics:
-                            continue
-
-                        self.all_gui_topics.append(i)
-
-            if sensors:
-                for sensor_id in sensors:
-                    sensor = device + sensor_id
-
-                    measurement = sensor.format("sensor/measurement")
-
-                    master_topics = [measurement]
-
-                    self.add_topics_and_subscribe(sensor, *master_topics)
-
-        if len(self.all_gui_topics) > 0:
-            self._publish(GUI_TOPICS, {"topics": self.all_gui_topics})
-
+    def __publish_gui_states(self) -> None:
         states = self.get_gui_formatted_states()
 
-        if states:
-            self._publish(SYNC_TOPIC, states)
+        if not states:
+            return
+
+        self.publish(SYNC_TOPIC, states)
 
     def run(self) -> None:
         """Start the master-controller and keep it running
