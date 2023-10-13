@@ -95,6 +95,9 @@ def get_stages(floor: str, data: dict) -> list[str]:
         return stages
 
     for i in data[floor]:
+        if "stage" not in i:
+            continue
+
         stages.append(i)
     return stages
 
@@ -189,11 +192,11 @@ def topic_contains(topic: str, *args: str) -> bool:
         Wheter or not the topic contains one or more of the args.
     """
     for arg in args:
-        if not topic:
+        if arg not in topic:
             continue
 
-        if arg in topic:
-            return True
+        return True
+
     return False
 
 
@@ -201,13 +204,16 @@ def get_topics_containing(topics: list[str], string: str) -> list[str]:
     result = []
 
     for topic in topics:
-        if string in topic:
-            result.append(topic)
+        if string not in topic:
+            continue
+
+        result.append(topic)
+
     return result
 
 
 def get_unique_id(topic: str) -> str:
-    """Creats a unique id given topic.
+    """Gets a unique id for a device, given topic.
 
     Args:
         topic: MQTT topic string
@@ -236,7 +242,11 @@ def get_unique_id(topic: str) -> str:
     part = parts[floor_index + offset + 1]
 
     # floor_1/stage_1/climate_node/LED
-    unqiue_id = "/".join([floor, stage, node, part])
+    if stage:
+        unqiue_id = "/".join([floor, stage, node, part])
+    else:
+        unqiue_id = "/".join([floor, node, part])
+
     logging.debug(f"{unqiue_id=}")
 
     return unqiue_id

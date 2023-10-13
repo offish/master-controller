@@ -41,7 +41,7 @@ class Controller:
         )
         self.all_gui_topics: list[str] = []
         self.all_topics: list[str] = []
-        self.all_devices: list[str] = []
+        # self.all_devices: list[str] = []
         self.state = {}  # overview of all states, unique_id: value
 
     @staticmethod
@@ -70,7 +70,14 @@ class Controller:
         topic = topic.replace("/receipt", "")
         unique_id = get_unique_id(topic)
 
-        self.state[unique_id] = data["value"]
+        value = data.get("value")
+
+        # e.g. plant information node with max_stages
+        if not value:
+            return
+
+        self.state[unique_id] = value
+
         # self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
         # TODO: test publishing to gui
@@ -137,13 +144,13 @@ class Controller:
             # it already knows its own state
             return False
 
-        actuator_id = get_last_part(topic)
+        _id = get_last_part(topic)
         floor = get_floor_from_topic(topic)
         stage = get_stage_from_topic(topic)
 
         command_topic = topic.replace("gui_command", "command")
 
-        data["id"] = actuator_id
+        data["id"] = _id
         data["floor"] = floor
         data["stage"] = stage
 
@@ -189,7 +196,7 @@ class Controller:
         node_id = get_second_last_part(topic)
         last_part = get_last_part(topic)
 
-        logging.debug(f"Got new {last_part} message from {node_id} with payload {data}")
+        logging.debug(f"{topic=} {last_part=} {node_id=} {data=}")
 
         self.log(0, "received a message!")
 
@@ -201,6 +208,9 @@ class Controller:
 
         if topic_contains(topic, "disconnected"):
             device_id = data["device_id"]
+
+            # TODO: update gui that the node disconnected
+
             # TODO: unsub?
             logging.warning(f"{device_id} disconnected")
             self.log(1, f"{device_id} disconnected")
@@ -235,7 +245,7 @@ class Controller:
 
         self.autonomy.add_data({"topic": topic, "type": last_part, **data})
 
-    def add_topics_and_subscribe(self, device: str, *args) -> None:
+    def append_topics_and_subscribe(self, *args) -> None:
         """Adds topics to global lists of all topics and devices, and
         subscribes to them.
 
@@ -243,76 +253,97 @@ class Controller:
             device: A device topic which must be formattable
             *args: Strings which also should be subscribed to
         """
-        if device not in self.all_devices:
-            self.all_devices.append(device)
+        # if generic_device not in self.all_devices:
+        #     self.all_devices.append(generic_device)
 
         for topic in args:
             if topic in self.all_topics:
                 continue
 
-            self.client.subscribe(topic=topic)
+            self.client.subscribe(topic)
             self.all_topics.append(topic)
 
             logging.info(f"Subscribed to {topic}")
 
+    def __append_gui_topic(self, topic: str) -> None:
+        if topic in self.all_gui_topics:
+            return
+
+        self.all_gui_topics.append(topic)
+
+    def __get_logic_controllers(
+        self, data: dict, floor: str, node_id: str
+    ) -> list[set]:
+        topics = []
+
+        generic_topic = PREFIX + "{}/" + f"{floor}/{node_id}/"
+        logic_controllers = data[floor].get("logic_controllers", [])
+
+        for logic_controller in logic_controllers:
+            # hydroplant/{}/floor_1/plant_information_node/plant_information
+            topic = generic_topic + logic_controller
+
+            gui_command = topic.format("gui_command")
+            receipt = topic.format("command") + "/receipt"
+
+            self.__append_gui_topic(gui_command)
+
+            topics += [gui_command, receipt]
+
+        return topics
+
+    def __get_actuators(
+        self, data: dict, floor: str, node_id: str, stages: list
+    ) -> list[str]:
+        topics = []
+
+        for stage in stages:
+            generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+
+            actuators = data[floor][stage].get("actuators", [])
+
+            for actuator in actuators:
+                topic = generic_topic + actuator
+
+                gui_command = topic.format("gui_command")
+                receipt = topic.format("command") + "/receipt"
+
+                self.__append_gui_topic(gui_command)
+
+                topics += [gui_command, receipt]
+
+        return topics
+
+    def __get_sensors(
+        self, data: dict, floor: str, node_id: str, stages: list
+    ) -> list[str]:
+        topics = []
+
+        for stage in stages:
+            generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+
+            sensors = data[floor][stage].get("sensors", [])
+
+            for sensor in sensors:
+                topic = generic_topic + sensor
+
+                topic = topic.format("sensor/measurement")
+
+                topics += [topic]
+
+        return topics
+
     def __handle_device_present(self, data: dict, node_id: str) -> None:
         floor = get_floor(data)
 
-        logic_controllers = data[floor].get("logic_controllers", [])
-
-        for logic_controller_id in logic_controllers:
-            logic_controller = (
-                PREFIX + "{}/" + f"{floor}/{node_id}/{logic_controller_id}"
-            )
-
-            command = logic_controller.format("gui_command")
-            receipt = command + "/receipt"
-
-            self.add_topics_and_subscribe(logic_controller, *[command, receipt])
-            self.all_gui_topics.append(command)
-
-        if logic_controllers:
-            del data[floor]["logic_controllers"]
+        topics = self.__get_logic_controllers(data, floor, node_id)
 
         stages = get_stages(floor, data)
 
-        # TODO: fix this whole function, really ugly and hard to read
+        topics += self.__get_actuators(data, floor, node_id, stages)
+        topics += self.__get_sensors(data, floor, node_id, stages)
 
-        logging.debug(f"{data=}")
-
-        for stage in stages:
-            actuators = data[floor][stage].get("actuators", [])
-            sensors = data[floor][stage].get("sensors", [])
-
-            device = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
-
-            for actuator_id in actuators:
-                actuator = device + actuator_id
-
-                gui_command = actuator.format("gui_command")
-                receipt = actuator.format("command") + "/receipt"
-
-                master_topics = [gui_command, receipt]
-                gui_topics = [gui_command]
-
-                self.add_topics_and_subscribe(actuator, *master_topics)
-
-                # TODO: fix this
-
-                for i in gui_topics:
-                    if i in self.all_gui_topics:
-                        continue
-
-                    self.all_gui_topics.append(i)
-
-            for sensor_id in sensors:
-                sensor = device + sensor_id
-
-                measurement = sensor.format("sensor/measurement")
-
-                master_topics = [measurement]
-
-                self.add_topics_and_subscribe(sensor, *master_topics)
+        self.append_topics_and_subscribe(*topics)
 
     def setup_device(self, data: dict) -> None:
         """Setups device given data.
@@ -361,16 +392,21 @@ class Controller:
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)
 
+        # get previous saved state of the system
         self.state = self.db.get_state()
 
         logging.debug("Starting MQTT loop")
+        # start mqtt communication in thread
         communication = Thread(target=self.client.loop_forever)
         communication.start()
 
         # nodes listen to this, so they can present themselves
-        # if they were already running
+        # if they are already running
         self.client.publish(READY_TOPIC, "")
 
         logging.debug("Starting autonomy")
-        self.autonomy.disable()
+
+        self.autonomy.disable()  # disable while we test
         self.autonomy.run()
+
+        communication.join()

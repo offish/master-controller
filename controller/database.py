@@ -7,8 +7,8 @@ from pymongo import MongoClient, collection
 
 class Database:
     def __init__(self, host: str = DATABASE_HOST, port: int = DATABASE_PORT) -> None:
-        self._client = MongoClient(host=host, port=port)
-        self.db = self._client["hydroplant"]
+        self.__client = MongoClient(host=host, port=port)
+        self.db = self.__client["hydroplant"]
         logging.info("Connected to database")
 
         self.measurement = self.db["measurements"]
@@ -16,26 +16,6 @@ class Database:
         self.sensor = self.db["sensor"]
         self.state = self.db["state"]
         self.logs = self.db["logs"]
-
-    def _get_which_database(self, topic: str) -> collection.Collection:
-        """Gets which database to use.
-
-        Args:
-            topic: MQTT topic for that message
-
-        Returns:
-            A MongoDB collection to use
-        """
-        if "sensor" in topic:
-            return self.sensor
-
-        if "measurement" in topic:
-            return self.measurement
-
-        if "actuator" in topic:
-            return self.actuator
-
-        return self.db[topic]
 
     def add_measurement(self, node_id: str, sensor_id: str, data: dict) -> None:
         """Insert measurement into database.
