@@ -44,6 +44,17 @@ class Controller:
         # self.all_devices: list[str] = []
         self.state = {}  # overview of all states, unique_id: value
 
+        # hardcoded places
+        self.places = {
+            "1": {
+                "1": False,  # there is no plant holder in place 2
+                "3": True,
+                "max_places": 3,
+            },  # bool is if should change stage
+            "2": {"1": False, "2": True, "3": True, "max_places": 3},
+            "3": {"2": True, "max_places": 3},
+        }
+
     @staticmethod
     def __json_to_str(data: dict | list) -> str:
         return json.dumps(data)
@@ -73,7 +84,7 @@ class Controller:
         value = data.get("value")
 
         # e.g. plant information node with max_stages
-        if not value:
+        if value is None:
             return
 
         self.state[unique_id] = value
@@ -125,7 +136,7 @@ class Controller:
             # changing size while iterating
             data = copy
 
-        logging.debug(f"Sending to {topic} with payload {data}")
+        logging.debug(f"-> {topic} {data}")
         self.client.publish(topic, payload=self.__json_to_str(data))
 
     def __handle_gui_command(self, topic: str, data: dict) -> bool:
@@ -191,7 +202,7 @@ class Controller:
 
         data["time"] = time.time()  # add time for later checks
 
-        logging.debug(f"{topic} {data}")
+        logging.debug(f"<- {topic} {data}")
 
         node_id = get_second_last_part(topic)
         last_part = get_last_part(topic)
