@@ -1,27 +1,6 @@
 # master inspection on water-node
 
 
-best_placement = {
-    "1": {
-        "2": False,  # there is no plant holder in place 2
-        "3": False,
-        "max_places": 3,
-    },  # bool is if should change stage
-    "2": {"1": False, "2": False, "3": False, "max_places": 3},
-    "3": {"3": False, "max_places": 3},
-}
-
-not_best_placement = {
-    "1": {
-        "1": False,  # there is no plant holder in place 2
-        "3": True,
-        "max_places": 3,
-    },  # bool is if should change stage
-    "2": {"1": False, "2": True, "3": True, "max_places": 3},
-    "3": {"2": True, "max_places": 3},
-}
-
-
 def has_ready_to_move(places: dict) -> bool:
     for stage in places:
         del places[stage]["max_places"]
@@ -45,7 +24,7 @@ def has_best_placement(places: dict) -> bool:
 
         del p["max_places"]
 
-        optimal
+        # optimal
 
         for place_num in p:
             ready = p[place_num]
@@ -56,5 +35,5 @@ def move_to_best_placeent(places: dict) -> list:
     pass
 
 
-print(has_best_placement(not_best_placement))
-print(has_best_placement(best_placement))
+# print(has_best_placement(not_best_placement))
+# print(has_best_placement(best_placement))

@@ -15,12 +15,18 @@ docker start emqx
 python3 main.py
 ```
 
-## Run GitHub Actions
+## Testing
+```bash
+# master-controller/
+python -m unittest
+```
+
+<!-- ## Run GitHub Actions
 ```bash
 # @hydro-plant-web-server
 # actions-runner/
 nohup ./run.sh &
-```
+``` -->
 
 ## Documentation
 ### Building
