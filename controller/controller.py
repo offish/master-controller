@@ -12,6 +12,7 @@ from .utils import (
     get_unique_id,
 )
 from .autonomy import Autonomy
+from .classes import *
 
 from threading import Thread
 import logging
@@ -39,21 +40,36 @@ class Controller:
             log_callback=self.log,
             wait=AUTONOMY_SLEEP,
         )
-        self.all_gui_topics: list[str] = []
-        self.all_topics: list[str] = []
+        # self.all_gui_topics: list[str] = []
+        # self.all_topics: list[str] = []
         # self.all_devices: list[str] = []
-        self.state = {}  # overview of all states, unique_id: value
+        # self.state = {}  # overview of all states, unique_id: value
+
+        self.system = HydroplantSystem(
+            Floor("floor_1", "stage_1", "stage_2", "stage_3"),
+            Floor("floor_2", "stage_1", "stage_2", "stage_3"),
+            Floor("floor_3", "stage_1", "stage_2", "stage_3"),
+        )
 
         # hardcoded places
-        self.places = {
-            "1": {
-                "1": False,  # there is no plant holder in place 2
-                "3": True,
-                "max_places": 3,
-            },  # bool is if should change stage
-            "2": {"1": False, "2": True, "3": True, "max_places": 3},
-            "3": {"2": True, "max_places": 3},
-        }
+        # self.places = {
+        #     "1": {
+        #         "1": False,  # there is no plant holder in place 2
+        #         "3": True,
+        #         "max_places": 3,
+        #     },  # bool is if should change stage
+        #     "2": {"1": False, "2": True, "3": True, "max_places": 3},
+        #     "3": {"2": True, "max_places": 3},
+        # }
+
+    def get_floor(self, topic: str) -> Floor | None:
+        floor_str = get_floor_from_topic(topic)
+
+        if not floor_str:
+            return None
+
+        floor = floor_str.replace("floor_", "")
+        return self.system[int(floor) - 1]
 
     @staticmethod
     def __json_to_str(data: dict | list) -> str:
@@ -217,8 +233,12 @@ class Controller:
             self.publish(READY_TOPIC, "")
             return
 
+        # ok
+
         if topic_contains(topic, "disconnected"):
             device_id = data["device_id"]
+
+            # DELETE object from self.system!
 
             # TODO: update gui that the node disconnected
 
@@ -346,6 +366,8 @@ class Controller:
 
     def __handle_device_present(self, data: dict, node_id: str) -> None:
         floor = get_floor(data)
+
+        # TODO: create objects from JSON
 
         topics = self.__get_logic_controllers(data, floor, node_id)
 
