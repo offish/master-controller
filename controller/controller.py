@@ -40,6 +40,7 @@ class Controller:
             log_callback=self.log,
             wait=AUTONOMY_SLEEP,
         )
+
         # self.all_gui_topics: list[str] = []
         # self.all_topics: list[str] = []
         # self.all_devices: list[str] = []
@@ -50,17 +51,6 @@ class Controller:
             Floor("floor_2", "stage_1", "stage_2", "stage_3"),
             Floor("floor_3", "stage_1", "stage_2", "stage_3"),
         )
-
-        # hardcoded places
-        # self.places = {
-        #     "1": {
-        #         "1": False,  # there is no plant holder in place 2
-        #         "3": True,
-        #         "max_places": 3,
-        #     },  # bool is if should change stage
-        #     "2": {"1": False, "2": True, "3": True, "max_places": 3},
-        #     "3": {"2": True, "max_places": 3},
-        # }
 
     def get_floor(self, topic: str) -> Floor | None:
         floor_str = get_floor_from_topic(topic)
@@ -249,7 +239,7 @@ class Controller:
 
         if topic_contains(topic, "device"):
             logging.info("Got device message")
-            self.setup_device(data)
+            self.setup_device(topic, data)
 
         if topic_contains(topic, "gui_command"):
             logging.info("Got command from GUI")
@@ -364,10 +354,41 @@ class Controller:
 
         return topics
 
-    def __handle_device_present(self, data: dict, node_id: str) -> None:
-        floor = get_floor(data)
+    def __handle_device_present(self, topic: str, data: dict, node_id: str) -> None:
+        floor_name = get_floor(data)
 
         # TODO: create objects from JSON
+
+        
+        "floor_1": {
+            "stage_1": {"actuators": ["stepper"]},
+            "stage_2": {},
+            "stage_3": {},
+            "logic_controllers": ["plant_information"],
+        }
+
+        
+        'floor_1': {
+            'stage_1': {'actuators': ["LED"]}, 
+            'stage_2': {'actuators': ["LED"]}, 
+            'stage_3': {'actuators': ["LED"]}
+        }
+        
+
+        for floor in self.system.get_floors():
+            if floor.name!=floor_name:
+                continue
+
+            for l in data[floor.name].get("logic_controllers",[]):
+                for logic_controller in EXISTING_LOGIC_CONTROLLERS:
+                    if logic_controller.name!=l:
+                        continue
+
+                    floor.logic_controllers.append(logic_controller())
+
+            for stage in floor.get_stages():
+                pass
+
 
         topics = self.__get_logic_controllers(data, floor, node_id)
 
@@ -378,7 +399,7 @@ class Controller:
 
         self.append_topics_and_subscribe(*topics)
 
-    def setup_device(self, data: dict) -> None:
+    def setup_device(self, topic: str, data: dict) -> None:
         """Setups device given data.
 
         Sets up a new device and subscribes to its topics and other
@@ -391,11 +412,13 @@ class Controller:
 
         if node_id == "gui":
             logging.info("GUI connected")
+
+            self.system.gui = GUI()
             # gui doesnt have interesting data for us
 
         else:
             # other nodes has interesting data
-            self.__handle_device_present(data, node_id)
+            self.__handle_device_present(topic, data, node_id)
 
         # update gui with all topics (will only happen when something connects)
         self.__publish_gui_topics()

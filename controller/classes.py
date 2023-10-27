@@ -25,31 +25,57 @@ class LED(Entity):
         super().__init__(unique_id, command_topic, gui_topic, data)
 
 
-class PlantMoverNode:
-    def __init__(self) -> None:
-        pass
-
-
 class PlantHolder:
     def __init__(self) -> None:
         self.plants: list[Plant] = []
 
 
-class PlantInformationNode:
-    def __init__(self) -> None:
-        pass
-
-
-class ClimateNode:
-    def __init__(self) -> None:
-        pass
+class Actuator(Entity):
+    def __init__(
+        self, unique_id: str, command_topic: str, gui_topic: str = "", data: dict = {}
+    ) -> None:
+        super().__init__(unique_id, command_topic, gui_topic, data)
 
 
 class Stage:
     # stage_1
     def __init__(self, name: str) -> None:
         self.name = name
+        self.actuators: list[Actuator] = []
         self.plant_holders: list[PlantHolder] = []
+
+
+class LogicController:
+    def __init__(self) -> None:
+        pass
+
+
+class PlantMoverNode(LogicController):
+    name = "plant_mover"
+
+    def __init__(self) -> None:
+        pass
+
+
+class PlantInformationNode(LogicController):
+    name = "plant_information"
+
+    def __init__(self) -> None:
+        pass
+
+
+class ClimateNode:
+    name = "climate"
+
+    def __init__(self) -> None:
+        pass
+
+
+ALL_LOGIC_CONTROLLERS: list[LogicController] = [
+    PlantMoverNode,
+    PlantInformationNode,
+    ClimateNode,
+]
 
 
 class Floor:
@@ -57,9 +83,13 @@ class Floor:
     def __init__(self, name: str, *stage_names) -> None:
         self.name = name
         self.stages: list[Stage] = [Stage(stage_name) for stage_name in stage_names]
+        self.logic_controllers: list[LogicController] = []
         self.plant_mover: PlantMoverNode = None
         self.plant_information: PlantInformationNode = None
         self.climate: ClimateNode = None
+
+    def get_stages(self) -> list[Stage]:
+        return [stage for stage in self.stages]
 
     # def add_stage(self, stage_name: str) -> None:
     #     self.stages.append(Stage(stage_name))
@@ -74,7 +104,8 @@ class Plant:
 
 class GUI:
     def __init__(self) -> None:
-        pass
+        # all topics GUI wants?
+        self.topics: list[str] = []
 
 
 class HydroplantSystem:
@@ -89,18 +120,22 @@ class HydroplantSystem:
         return self.floors
 
 
-system = HydroplantSystem(
-    Floor("floor_1", "stage_1", "stage_2", "stage_3"),
-    Floor("floor_2", "stage_1", "stage_2", "stage_3"),
-    Floor("floor_3", "stage_1", "stage_2", "stage_3"),
-)
+a = Actuator("a", "dsa")
 
-print([floor.name for floor in system.get_floors()])
+print(a.super())
+
+# system = HydroplantSystem(
+#     Floor("floor_1", "stage_1", "stage_2", "stage_3"),
+#     Floor("floor_2", "stage_1", "stage_2", "stage_3"),
+#     Floor("floor_3", "stage_1", "stage_2", "stage_3"),
+# )
+
+# print([floor.name for floor in system.get_floors()])
+
+# # for floor in system.get_floors():
+# #     floor.add_stages("stage_1", "stage_2", "stage_3")
+
 
 # for floor in system.get_floors():
-#     floor.add_stages("stage_1", "stage_2", "stage_3")
-
-
-for floor in system.get_floors():
-    for stage in floor.stages:
-        print(stage.name)
+#     for stage in floor.stages:
+#         print(stage.name)
