@@ -65,21 +65,21 @@ class Controller:
     def __json_to_str(data: dict | list) -> str:
         return json.dumps(data)
 
-    def get_gui_formatted_states(self) -> list[dict]:
-        # TODO: only send parts at a time, not the whole thing
-        # everytime, due to mqtt message size
-        gui_formatted = {}
+    # def get_gui_formatted_states(self) -> dict:
+    #     # TODO: only send parts at a time, not the whole thing
+    #     # everytime, due to mqtt message size
+    #     gui_formatted = {}
 
-        if not self.state:
-            return []
+    #     if not self.state:
+    #         return []
 
-        for key, value in self.state.items():
-            # gui does not want this
-            key = key.replace("/receipt", "")
-            gui_formatted[GUI_COMMAND + key] = value
+    #     for key, value in self.state.items():
+    #         # gui does not want this
+    #         key = key.replace("/receipt", "")
+    #         gui_formatted[GUI_COMMAND + key] = value
 
-        # {"hydroplant/gui_command/floor_1/stage_1/climate_node/LED": 1}
-        return gui_formatted
+    #     # {"hydroplant/gui_command/floor_1/stage_1/climate_node/LED": 1}
+    #     return gui_formatted
 
     def update_and_publish_state(self, topic: str, data: dict) -> None:
         # unique id is floor_1/stage_1/climate_node/LED
@@ -93,12 +93,13 @@ class Controller:
         if value is None:
             return
 
-        self.state[unique_id] = value
+        # TODO: self.system.get_states() so we can update db
+        # self.state[unique_id] = value
 
         # self.autonomy.update_state(self.state)
         self.db.update_state(self.state)
         # TODO: test publishing to gui
-        self.publish(SYNC_TOPIC, self.get_gui_formatted_states())
+        self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
 
     def get_topics(self) -> list[str]:
         """Function for autonomy to get all existing topics."""
@@ -161,18 +162,22 @@ class Controller:
             # it already knows its own state
             return False
 
-        _id = get_last_part(topic)
-        floor = get_floor_from_topic(topic)
-        stage = get_stage_from_topic(topic)
+        unique_id = get_unique_id(topic)
 
-        command_topic = topic.replace("gui_command", "command")
+        command = get_object(unique_id).get_command(**data)
 
-        data["id"] = _id
-        data["floor"] = floor
-        data["stage"] = stage
-
-        self.publish(topic=command_topic, data=data)
+        self.publish(*command)
         return True  # inform autonomy
+
+        # _id = get_last_part(topic)
+        # floor = get_floor_from_topic(topic)
+        # stage = get_stage_from_topic(topic)
+
+        # command_topic = topic.replace("gui_command", "command")
+
+        # data["id"] = _id
+        # data["floor"] = floor
+        # data["stage"] = stage
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         """Handles MQTT connection to broker and subscribes to needed topics."""
@@ -226,15 +231,15 @@ class Controller:
         # ok
 
         if topic_contains(topic, "disconnected"):
-            device_id = data["device_id"]
+            node_id = data["device_id"]
 
-            # DELETE object from self.system!
+            logging.warning(f"{node_id} disconnected")
+            self.log(1, f"{node_id} disconnected")
 
-            # TODO: update gui that the node disconnected
+            unsubscribe_topics = self.system.delete_objects(node_id)
+            self.act_on_topics(False, *unsubscribe_topics)
 
-            # TODO: unsub?
-            logging.warning(f"{device_id} disconnected")
-            self.log(1, f"{device_id} disconnected")
+            self.publish(SYNC_TOPIC, self.system.get_gui_sync())
             return
 
         if topic_contains(topic, "device"):
@@ -266,7 +271,7 @@ class Controller:
 
         self.autonomy.add_data({"topic": topic, "type": last_part, **data})
 
-    def append_topics_and_subscribe(self, *args) -> None:
+    def act_on_topics(self, subscribe: bool, *args) -> None:
         """Adds topics to global lists of all topics and devices, and
         subscribes to them.
 
@@ -274,130 +279,116 @@ class Controller:
             device: A device topic which must be formattable
             *args: Strings which also should be subscribed to
         """
-        # if generic_device not in self.all_devices:
-        #     self.all_devices.append(generic_device)
+        # TODO: rewrite to handle list instead
 
         for topic in args:
-            if topic in self.all_topics:
-                continue
+            if subscribe:
+                self.client.subscribe(topic)
+                logging.info(f"Subscribed to {topic}")
+            else:
+                self.client.unsubscribe(topic)
+                logging.info(f"Unsubscribed to {topic}")
 
-            self.client.subscribe(topic)
-            self.all_topics.append(topic)
+    # def __append_gui_topic(self, topic: str) -> None:
+    #     if topic in self.all_gui_topics:
+    #         return
 
-            logging.info(f"Subscribed to {topic}")
+    #     self.all_gui_topics.append(topic)
 
-    def __append_gui_topic(self, topic: str) -> None:
-        if topic in self.all_gui_topics:
-            return
+    # def __get_logic_controllers(
+    #     self, data: dict, floor: str, node_id: str
+    # ) -> list[set]:
+    #     topics = []
 
-        self.all_gui_topics.append(topic)
+    #     generic_topic = PREFIX + "{}/" + f"{floor}/{node_id}/"
+    #     logic_controllers = data[floor].get("logic_controllers", [])
 
-    def __get_logic_controllers(
-        self, data: dict, floor: str, node_id: str
-    ) -> list[set]:
-        topics = []
+    #     for logic_controller in logic_controllers:
+    #         # hydroplant/{}/floor_1/plant_information_node/plant_information
+    #         topics = generic_topic + logic_controller
 
-        generic_topic = PREFIX + "{}/" + f"{floor}/{node_id}/"
-        logic_controllers = data[floor].get("logic_controllers", [])
+    #         # gui_command = topic.format("gui_command")
+    #         # receipt = topic.format("command") + "/receipt"
 
-        for logic_controller in logic_controllers:
-            # hydroplant/{}/floor_1/plant_information_node/plant_information
-            topic = generic_topic + logic_controller
+    #         # self.__append_gui_topic(gui_command)
 
-            gui_command = topic.format("gui_command")
-            receipt = topic.format("command") + "/receipt"
+    #         # topics += [gui_command, receipt]
 
-            self.__append_gui_topic(gui_command)
+    #     return topics
 
-            topics += [gui_command, receipt]
+    # def __get_actuators(
+    #     self, data: dict, floor: str, node_id: str, stages: list
+    # ) -> list[str]:
+    #     topics = []
 
-        return topics
+    #     for stage in stages:
+    #         generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
 
-    def __get_actuators(
-        self, data: dict, floor: str, node_id: str, stages: list
-    ) -> list[str]:
-        topics = []
+    #         actuators = data[floor][stage].get("actuators", [])
 
-        for stage in stages:
-            generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+    #         for actuator in actuators:
+    #             topic = generic_topic + actuator
 
-            actuators = data[floor][stage].get("actuators", [])
+    #             # gui_command = topic.format("gui_command")
+    #             # receipt = topic.format("command") + "/receipt"
 
-            for actuator in actuators:
-                topic = generic_topic + actuator
+    #             # self.__append_gui_topic(gui_command)
 
-                gui_command = topic.format("gui_command")
-                receipt = topic.format("command") + "/receipt"
+    #             # topics += [gui_command, receipt]
 
-                self.__append_gui_topic(gui_command)
+    #     return topics
 
-                topics += [gui_command, receipt]
+    # def __get_sensors(
+    #     self, data: dict, floor: str, node_id: str, stages: list
+    # ) -> list[str]:
+    #     topics = []
 
-        return topics
+    #     for stage in stages:
+    #         generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
 
-    def __get_sensors(
-        self, data: dict, floor: str, node_id: str, stages: list
-    ) -> list[str]:
-        topics = []
+    #         sensors = data[floor][stage].get("sensors", [])
 
-        for stage in stages:
-            generic_topic = PREFIX + "{}/" + f"{floor}/{stage}/{node_id}/"
+    #         for sensor in sensors:
+    #             topic = generic_topic + sensor
 
-            sensors = data[floor][stage].get("sensors", [])
+    #             topic = topic.format("sensor/measurement")
 
-            for sensor in sensors:
-                topic = generic_topic + sensor
+    #             topics += [topic]
 
-                topic = topic.format("sensor/measurement")
+    #     return topics
 
-                topics += [topic]
+    def __handle_device_present(self, data: dict, node_id: str) -> None:
+        new_topics = []
 
-        return topics
-
-    def __handle_device_present(self, topic: str, data: dict, node_id: str) -> None:
+        # a device can only be on 1 floor
         floor_name = get_floor(data)
 
-        # TODO: create objects from JSON
+        # get the relevant floor
+        floor = self.system.get_floor_by_name(floor_name)
 
-        
-        "floor_1": {
-            "stage_1": {"actuators": ["stepper"]},
-            "stage_2": {},
-            "stage_3": {},
-            "logic_controllers": ["plant_information"],
-        }
+        # floor/(stage)/node/part
 
-        
-        'floor_1': {
-            'stage_1': {'actuators': ["LED"]}, 
-            'stage_2': {'actuators': ["LED"]}, 
-            'stage_3': {'actuators': ["LED"]}
-        }
-        
+        for logic_controller in data[floor].get("logic_controllers", []):
+            unique_id = f"{floor}/{node_id}/{logic_controller}"
 
-        for floor in self.system.get_floors():
-            if floor.name!=floor_name:
-                continue
-
-            for l in data[floor.name].get("logic_controllers",[]):
-                for logic_controller in EXISTING_LOGIC_CONTROLLERS:
-                    if logic_controller.name!=l:
-                        continue
-
-                    floor.logic_controllers.append(logic_controller())
-
-            for stage in floor.get_stages():
-                pass
-
-
-        topics = self.__get_logic_controllers(data, floor, node_id)
+            obj = floor.add_logic_controller(unique_id)
+            new_topics += obj.get_subscribe_topics()
 
         stages = get_stages(floor, data)
 
-        topics += self.__get_actuators(data, floor, node_id, stages)
-        topics += self.__get_sensors(data, floor, node_id, stages)
+        for stage_name in stages:
+            stage = floor.get_stage_by_name(stage_name)
 
-        self.append_topics_and_subscribe(*topics)
+            for actuator in data[floor][stage].get("actuators", []):
+                unique_id = f"{floor}/{stage}/{node_id}/{actuator}"
+                obj = stage.add_actuator(unique_id)
+                new_topics += obj.get_subscribe_topics()
+
+            for sensor in data[floor][stage].get("sensors", []):
+                # do we actually need this?
+                pass
+
+        self.act_on_topics(True, *new_topics)
 
     def setup_device(self, topic: str, data: dict) -> None:
         """Setups device given data.
@@ -422,23 +413,8 @@ class Controller:
 
         # update gui with all topics (will only happen when something connects)
         self.__publish_gui_topics()
-
-        # sync new gui states (will only happen when something connects)
-        self.__publish_gui_states()
-
-    def __publish_gui_topics(self) -> None:
-        if len(self.all_gui_topics) == 0:
-            return
-
-        self.publish(GUI_TOPICS, {"topics": self.all_gui_topics})
-
-    def __publish_gui_states(self) -> None:
-        states = self.get_gui_formatted_states()
-
-        if not states:
-            return
-
-        self.publish(SYNC_TOPIC, states)
+        self.publish(GUI_TOPICS, {"topics": self.system.get_gui_topics()})
+        self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
 
     def run(self) -> None:
         """Start the master-controller and keep it running
