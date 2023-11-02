@@ -1,5 +1,5 @@
 from .utils import get_unique_id, get_last_part, get_data_type
-from .job import Job, Step, EJobState, EStatus
+from .job import Job, Step, EJobState
 
 import datetime as dt
 import logging

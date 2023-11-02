@@ -61,11 +61,11 @@ class Job:
 
 # job = Job([Step("topic", {"value": 1})])
 
-step = Step("topic", {"some": "data"}, time.time())
-print(step)
-time.sleep(1)
-step1 = Step("topic", {"some": "data"}, time.time())
-print(step1)
+# step = Step("topic", {"some": "data"}, time.time())
+# print(step)
+# time.sleep(1)
+# step1 = Step("topic", {"some": "data"}, time.time())
+# print(step1)
 
 # job.set_state(EJobState.PENDING)
 

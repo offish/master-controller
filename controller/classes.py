@@ -1,4 +1,4 @@
-from utils import (
+from .utils import (
     get_floor_from_topic,
     get_stage_from_topic,
     get_unique_id,
@@ -163,6 +163,12 @@ class HydroplantSystem:
         self.floors: list[Floor] = [floor for floor in floors]
         # self.gui: GUI = None
 
+    def get_topics(self):
+        pass
+
+    def get_states(self):
+        pass
+
     def add_floor(self, name: str) -> None:
         self.floors.append(Floor(name))
 
@@ -242,15 +248,15 @@ class HydroplantSystem:
         return self.floors
 
 
-a = Actuator("a", "dsa")
+# a = Actuator("a", "dsa")
 
-print(a.super())
+# print(a.super())
 
-# system = HydroplantSystem(
-#     Floor("floor_1", "stage_1", "stage_2", "stage_3"),
-#     Floor("floor_2", "stage_1", "stage_2", "stage_3"),
-#     Floor("floor_3", "stage_1", "stage_2", "stage_3"),
-# )
+system = HydroplantSystem(
+    Floor("floor_1", "stage_1", "stage_2", "stage_3"),
+    Floor("floor_2", "stage_1", "stage_2", "stage_3"),
+    Floor("floor_3", "stage_1", "stage_2", "stage_3"),
+)
 
 # print([floor.name for floor in system.get_floors()])
 
@@ -273,12 +279,7 @@ def is_receipt(topic: str) -> bool:
     return topic.find("/receipt") != -1
 
 
-def get_object(topic: str) -> LogicController | Actuator | None:
-    if is_receipt(topic):
-        topic.replace("/receipt", "")
-
-    unique_id = get_unique_id(topic)
-
+def get_object_from_unique_id(unique_id: str) -> LogicController | Actuator | None:
     floor = system.get_floor(unique_id)
     stage = floor.get_stage(unique_id)
 
@@ -290,22 +291,30 @@ def get_object(topic: str) -> LogicController | Actuator | None:
     return stage.get_actuator(unique_id)
 
 
+def get_object(topic: str) -> LogicController | Actuator | None:
+    if is_receipt(topic):
+        topic.replace("/receipt", "")
+
+    unique_id = get_unique_id(topic)
+    return get_object_from_unique_id(unique_id)
+
+
 # TODO: when connect, send command on previous state to have correct state
 # if lights were on, send them to be on
 
 
 # we want LED actuator
-obj = get_object("hydroplant/command/floor_1/stage_1/climate_node/LED/receipt")
-print(obj)
+# obj = get_object("hydroplant/command/floor_1/stage_1/climate_node/LED/receipt")
+# print(obj)
 
-obj.set_data({"value": 1.03})
+# obj.set_data({"value": 1.03})
 
 # we want plant_information logic controller
-obj2 = get_object("hydroplant/command/floor_1/plant_information_node/plant_information")
-print(obj2)
+# obj2 = get_object("hydroplant/command/floor_1/plant_information_node/plant_information")
+# print(obj2)
 
-
-print(system.get_gui_sync_data())
+# print(system.get_gui_topics())
+# print(system.get_gui_sync_data())
 # print(system.get_all_topics)
 
 # for floor in system.get_floors():
