@@ -247,7 +247,7 @@ def get_unique_id(topic: str) -> str:
     else:
         unqiue_id = "/".join([floor, node, part])
 
-    logging.debug(f"{unqiue_id=}")
+    # logging.debug(f"{unqiue_id=}")
 
     return unqiue_id
 
@@ -257,3 +257,7 @@ def get_data_type(topic: str) -> str:
         if data_type in topic:
             return data_type
     return ""
+
+
+def is_receipt(topic: str) -> bool:
+    return topic.find("/receipt") != -1

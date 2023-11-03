@@ -1,5 +1,6 @@
 from .utils import get_unique_id, get_last_part, get_data_type
 from .job import Job, Step, EJobState
+from .hydroplant import HydroplantSystem, EntityType
 
 import datetime as dt
 import logging
@@ -14,9 +15,8 @@ class Autonomy:
 
     def __init__(
         self,
+        system,
         publish_callback,
-        topics_callback,
-        state_callback,
         log_callback,
         count: int = 1_000,
         wait: float = 1.0,
@@ -26,9 +26,9 @@ class Autonomy:
         self.count = count  # amount of data autonomy should remember
         self.is_enabled = True  # turn on/off autonomy logic
         self.publish = publish_callback  # callback to communicate with MQTT
-        self.topics = topics_callback  # all topics master knows of
-        self.state = state_callback  # current state of master
-        self.log = log_callback  # current state of master
+        self.system: HydroplantSystem = system
+
+        self.log = log_callback  # callback for logging
         self.wait = wait  # how long autonomy should sleep for each cycle
         self.time = 0.0  # current time, used for lights
 
@@ -69,16 +69,16 @@ class Autonomy:
     def __delete_job(self, job: dict) -> None:
         self.jobs.remove(job)
 
-    def __get_topics(self, string: str) -> list[str]:
-        topics = self.topics()
-        result = []
+    # def __get_topics(self, string: str) -> list[str]:
+    #     topics = self.topics()
+    #     result = []
 
-        for topic in topics:
-            if string not in topic:
-                continue
+    #     for topic in topics:
+    #         if string not in topic:
+    #             continue
 
-            result.append(topic)
-        return result
+    #         result.append(topic)
+    #     return result
 
     def __get_state(self) -> dict:
         return self.state()
@@ -91,27 +91,35 @@ class Autonomy:
 
         logging.debug(f"current hour {hour}")
 
-        if hour < 21 or hour > 7:
-            # gets all LEDs from stages
-            topics = self.__get_topics("LED")
+        for actuator in self.system.get_actuators():
+            if not actuator.is_type(EntityType.LED):
+                continue
 
-            logging.debug(f"{topics=}")
+            # TODO: replace with actuator.ruleset
+            if hour < 21 or hour > 7:
+                actuator.get_command(value=1)
+            else:
+                actuator.get_command(value=0)
 
-            for topic in topics:
-                if "receipt" in topic:
-                    continue
+            # topics = self.__get_topics("LED")
 
-                self.__add_job(topic, {"value": 1})
-                logging.debug(f"added job {self.jobs=}")
+            # logging.debug(f"{topics=}")
 
-        else:
-            topics = self.__get_topics("LED")
+            # for topic in topics:
+            #     if "receipt" in topic:
+            #         continue
 
-            for topic in topics:
-                if "receipt" in topic:
-                    continue
+            #     self.__add_job(topic, {"value": 1})
+            #     logging.debug(f"added job {self.jobs=}")
 
-                self.__add_job(topic, {"value": 0})
+        # else:
+        #     topics = self.__get_topics("LED")
+
+        #     for topic in topics:
+        #         if "receipt" in topic:
+        #             continue
+
+        #         self.__add_job(topic, {"value": 0})
 
     def __check_water(self):
         pass

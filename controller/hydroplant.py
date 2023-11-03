@@ -4,7 +4,19 @@ from .utils import (
     get_unique_id,
     get_last_part,
     get_second_last_part,
+    is_receipt,
 )
+
+from enum import IntEnum
+
+
+class EntityType(IntEnum):
+    PLANT_MOVER = 1
+    PLANT_INFORMATION = 2
+    WATER_CONTROLLER = 3
+    LED = 4
+    STEPPER = 5
+    WATER_PUMP = 6
 
 
 class Entity:
@@ -26,6 +38,8 @@ class Entity:
         self.stage = get_stage_from_topic(unique_id)  # could be ""
         self.node_id = get_second_last_part(unique_id)
 
+        self.type = EntityType[self.id.upper()]
+
     def get_command(self, **kwargs) -> tuple[str, dict]:
         return (
             self.command,
@@ -38,7 +52,10 @@ class Entity:
             },
         )
 
-    def get_value(self) -> float | None:
+    def is_type(self, type: EntityType) -> bool:
+        return type == self.type
+
+    def get_value(self) -> float | int | None:
         return self.value
 
     def set_data(self, data: dict) -> None:
@@ -163,21 +180,27 @@ class HydroplantSystem:
         self.floors: list[Floor] = [floor for floor in floors]
         # self.gui: GUI = None
 
-    def get_topics(self):
-        pass
+    def get_actuators(self) -> list[Actuator]:
+        actuators = []
 
-    def get_states(self):
-        pass
+        for floor in self.get_floors():
+            for stage in floor.get_stages():
+                actuators += stage.get_actuators()
+
+        return actuators
 
     def add_floor(self, name: str) -> None:
         self.floors.append(Floor(name))
 
-    def delete_objects(self, node_id: str) -> list[str]:
+    def delete_objects(self, node_id: str, floor_name: str) -> list[str]:
         """Delete actuators or logiccontrollers which has this node_id.
         returns the topics it subscribed to"""
         topics = []
 
         for floor in self.get_floors():
+            if floor_name and floor_name != floor.name:
+                continue
+
             for logic_controller in floor.get_logic_controllers():
                 if node_id != logic_controller.node_id:
                     continue
@@ -192,13 +215,11 @@ class HydroplantSystem:
 
                     topics += actuator.get_subscribe_topics()
                     stage.actuators.remove(actuator)
+
         return topics
 
     def get_gui_topics(self) -> list[str]:
         topics = []
-
-        # TODO: does this make sense? already gets these topics
-        # when sending sync, maybe GUI already can handle this?
 
         for floor in self.get_floors():
             for logic_controller in floor.get_logic_controllers():
@@ -247,76 +268,49 @@ class HydroplantSystem:
     def get_floors(self) -> list[Floor]:
         return self.floors
 
+    def get_object_from_unique_id(
+        self, unique_id: str
+    ) -> LogicController | Actuator | None:
+        floor = self.get_floor(unique_id)
+        stage = floor.get_stage(unique_id)
 
-# a = Actuator("a", "dsa")
+        # most likely a logic controller
+        # which only exists in floor, no stage
+        if not stage:
+            return floor.get_logic_controller(unique_id)
 
-# print(a.super())
+        return stage.get_actuator(unique_id)
 
-system = HydroplantSystem(
-    Floor("floor_1", "stage_1", "stage_2", "stage_3"),
-    Floor("floor_2", "stage_1", "stage_2", "stage_3"),
-    Floor("floor_3", "stage_1", "stage_2", "stage_3"),
-)
+    def get_object(self, topic: str) -> LogicController | Actuator | None:
+        if is_receipt(topic):
+            topic.replace("/receipt", "")
 
-# print([floor.name for floor in system.get_floors()])
-
-# # for floor in system.get_floors():
-# #     floor.add_stages("stage_1", "stage_2", "stage_3")
-
-# add in floor1
-system.floors[0].stages[0].actuators.append(
-    Actuator("floor_1/stage_1/climate_node/LED")
-)
-system.floors[0].add_logic_controller(
-    "floor_1/plant_information_node/plant_information"
-)
-
-
-# print([floor.name for floor in system.get_floors()])
-
-
-def is_receipt(topic: str) -> bool:
-    return topic.find("/receipt") != -1
-
-
-def get_object_from_unique_id(unique_id: str) -> LogicController | Actuator | None:
-    floor = system.get_floor(unique_id)
-    stage = floor.get_stage(unique_id)
-
-    # most likely a logic controller
-    # which only exists in floor, no stage
-    if not stage:
-        return floor.get_logic_controller(unique_id)
-
-    return stage.get_actuator(unique_id)
-
-
-def get_object(topic: str) -> LogicController | Actuator | None:
-    if is_receipt(topic):
-        topic.replace("/receipt", "")
-
-    unique_id = get_unique_id(topic)
-    return get_object_from_unique_id(unique_id)
+        unique_id = get_unique_id(topic)
+        return self.get_object_from_unique_id(unique_id)
 
 
 # TODO: when connect, send command on previous state to have correct state
 # if lights were on, send them to be on
 
 
-# we want LED actuator
-# obj = get_object("hydroplant/command/floor_1/stage_1/climate_node/LED/receipt")
-# print(obj)
+# system = HydroplantSystem(
+#     Floor("floor_1", "stage_1", "stage_2", "stage_3"),
+#     Floor("floor_2", "stage_1", "stage_2", "stage_3"),
+#     Floor("floor_3", "stage_1", "stage_2", "stage_3"),
+# )
 
-# obj.set_data({"value": 1.03})
-
-# we want plant_information logic controller
-# obj2 = get_object("hydroplant/command/floor_1/plant_information_node/plant_information")
-# print(obj2)
-
-# print(system.get_gui_topics())
-# print(system.get_gui_sync_data())
-# print(system.get_all_topics)
+# print([floor.name for floor in system.get_floors()])
 
 # for floor in system.get_floors():
-#     for stage in floor.stages:
-#         print(stage.name)
+#     floor.add_stages("stage_1", "stage_2", "stage_3")
+
+# add in floor1
+# system.floors[0].stages[0].actuators.append(
+#     Actuator("floor_1/stage_1/climate_node/LED")
+# )
+# system.floors[0].add_logic_controller(
+#     "floor_1/plant_information_node/plant_information"
+# )
+
+
+# print([floor.name for floor in system.get_floors()])
