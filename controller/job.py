@@ -1,6 +1,7 @@
 from dataclasses import dataclass, asdict
 from enum import IntEnum
 import time
+import logging
 
 
 class EJobState(IntEnum):
@@ -37,45 +38,41 @@ class Step:
         self.deadline = deadline  # will delete if stop passes deadline
 
         self.timestamp = time.time()
-        self.time_sent=0.0
+        self.time_sent = 0.0
 
         self.has_sent = False
-        self.has_finished = False
+        # self.has_finished = False
 
     def sent(self) -> None:
         self.has_sent = True
-        self.time_sent=time.time()
+        self.time_sent = time.time()
 
-    def finish(self) -> None:
-        self.finished = True
+    # def finish(self) -> None:
+    #     self.finished = True
 
-    def has_passed_wait_time(self)->bool:
-        return time.time()>=self.time_sent+self.wait
-    
-    def has_passed_deadline(self)->bool:
-        return time.time()>=self.timestamp+self.deadline
+    def has_passed_deadline(self) -> bool:
+        return time.time() >= self.timestamp + self.deadline
 
 
 class Job:
     """a job consists of one or more steps"""
-    def __init__(self,steps:list[Step]) -> None:
-        self.steps:list[Step]=steps
-        self.timestamp=time.time()
-        self.state=EJobState.UNCHECKED
-        self.is_done=False
-        self.at_step=0
 
+    def __init__(self, steps: list[Step]) -> None:
+        self.steps: list[Step] = steps
+        self.timestamp = time.time()
+        self.state = EJobState.UNCHECKED
+        self.is_done = False
+        self.at_step = 0
 
-
-    def done_with_steps(self)->bool:
+    def done_with_steps(self) -> bool:
         # [1,2] max 1 +1 = 2
-        return self.at_step==len(self.steps)
-
+        return self.at_step == len(self.steps)
 
     def has_state(self, state: EJobState) -> bool:
         return self.state == state
 
     def set_state(self, state: EJobState) -> None:
+        logging.debug(f"State changed to {state=}")
         self.state = state
 
 

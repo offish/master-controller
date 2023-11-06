@@ -320,7 +320,7 @@ class Controller:
 
         logging.debug("Starting autonomy")
 
-        self.autonomy.disable()  # disable while we test
+        # self.autonomy.disable()  # disable while we test
         self.autonomy.run()
 
         communication.join()

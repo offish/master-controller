@@ -1,4 +1,3 @@
-from .utils import get_unique_id, get_last_part, get_data_type
 from .job import Job, Step, EJobState
 from .hydroplant import HydroplantSystem, EntityType
 
@@ -57,6 +56,8 @@ class Autonomy:
                 step = Step(*actuator.get_command(value=1))
             else:
                 step = Step(*actuator.get_command(value=0))
+
+            # TODO: fix makes a million jobs
 
             self.__add_job([step])
 
@@ -143,13 +144,14 @@ class Autonomy:
         if job.has_state(EJobState.PENDING):
             # actually do job
             # get step
-            step = job.steps[job.at_step]
 
             # for step in job.steps:
             if job.done_with_steps():
                 logging.debug(f"Done with all steps in job {job=}")
                 job.set_state(EJobState.DONE)
                 return
+
+            step = job.steps[job.at_step]
 
             if not step.has_sent:
                 # actually do step
@@ -161,11 +163,7 @@ class Autonomy:
                 job.set_state(EJobState.KILLED)
                 return
 
-            if step.has_passed_wait_time():
-                job.set_state(EJobState.KILLED)
-                return
-
-            if self.__has_step_awaited_value():
+            if self.__has_step_awaited_value(step):
                 # wait is time to wait AFTER step is done
                 logging.debug(f"Step has finished!")
                 time.sleep(step.wait)
@@ -175,11 +173,20 @@ class Autonomy:
             logging.debug(f"Waiting for step {step=} to finish, has been sent")
 
     def __add_job(self, steps: list[Step]) -> None:
+        # TODO: check if value != current value
+        # no need to add job if it already is set to that
+        if len(steps) == 1:
+            step = steps[0]
+
+            if step.data["value"] == self.system.get_object(step.topic):
+                # already done -> ignore
+                return
+
         job = Job(steps)
         job.set_state(EJobState.QUEUED)
         self.jobs.append(job)
 
-        logging.info(f"Added job! jobs is now{self.jobs=}")
+        logging.info(f"Added job! jobs is now {self.jobs=}")
 
     def run(self) -> None:
         while True:
