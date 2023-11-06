@@ -40,53 +40,10 @@ class Autonomy:
         """Disable the autonomy."""
         self.is_enabled = False
 
-    # def add_data(self, data: dict) -> None:
-    #     data["status"] = "unchecked"
-    #     self.data.append(data)
-    #     self.data = self.data[-self.count :]  # only keep x latest records
-
-    def __delete_data(self, data: dict) -> None:
-        self.data.remove(data)
-
-    # def __set_status(self, status: str, data: dict) -> dict:
-    #     data["status"] = status
-    #     return data
-
-    def __set_data_status(self, status: str, data: dict) -> None:
-        index = self.data.index(data)
-        data = self.__set_status(status, data)
-        self.data[index] = data
-
-    # why do we need this?
-    # def __replace_job(self, job: dict) -> None:
-    #     for j in self.jobs:
-    #         if j["time"] != job["time"]:
-    #             continue
-
-    #         index = self.jobs.index(j)
-    #         self.jobs[index] = job
-
-    def __delete_job(self, job: dict) -> None:
+    def __delete_job(self, job: Job) -> None:
         self.jobs.remove(job)
 
-    # def __get_topics(self, string: str) -> list[str]:
-    #     topics = self.topics()
-    #     result = []
-
-    #     for topic in topics:
-    #         if string not in topic:
-    #             continue
-
-    #         result.append(topic)
-    #     return result
-
-    def __get_state(self) -> dict:
-        return self.state()
-
-    def __check_lights(self):
-        # TODO: rewrite to if-check time, turn lights
-        # only on/off if they dont match state and
-        # make function for adding jobs
+    def __check_lights(self) -> None:
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
@@ -97,245 +54,142 @@ class Autonomy:
 
             # TODO: replace with actuator.ruleset
             if hour < 21 or hour > 7:
-                # TODO: schedule job
-                self.__add_job(*actuator.get_command(value=1))
+                step = Step(*actuator.get_command(value=1))
             else:
-                self.__add_job(*actuator.get_command(value=0))
+                step = Step(*actuator.get_command(value=0))
 
-            # topics = self.__get_topics("LED")
+            self.__add_job([step])
 
-            # logging.debug(f"{topics=}")
+    def __check_plants_ready_to_move(self) -> None:
+        # loop through each place
+        # take pic
+        # if ready to move -> add job
+        # this job includes turn off water, then move
+        # job must use moving algo
 
-            # for topic in topics:
-            #     if "receipt" in topic:
-            #         continue
-
-            #     self.__add_job(topic, {"value": 1})
-            #     logging.debug(f"added job {self.jobs=}")
-
-        # else:
-        #     topics = self.__get_topics("LED")
-
-        #     for topic in topics:
-        #         if "receipt" in topic:
-        #             continue
-
-        #         self.__add_job(topic, {"value": 0})
+        pass
 
     def __check_water(self):
         pass
 
     def __check_interval_jobs(self):
+        # TODO: check time here, time now last check + timeout
+        self.__check_plants_ready_to_move()
         self.__check_lights()
         self.__check_water()
 
-    # TODO: rename this function, name does not make sense
-    def __process_measurement(self, topic: str, data: dict) -> None:
-        unique_id = get_unique_id(topic)
-        current_value = self.__get_state()[unique_id]
+    # def __process_data(self, topic: str, data: dict) -> None:
+    #     """here jobs gets added"""
+    #     # topic:
 
-        value = data.get("value")
+    #     data_type = get_data_type(topic)
 
-        # TODO: make sure current state is not matching
-        if value == current_value:
-            logging.warning("Device already has this value!")
-            self.log(1, "device already has this value!")
-            return
+    #     if not data_type:
+    #         return
 
-        # lights
+    #     # measurement -> camera -> move
+    #     # receipt -> delete
+    #     # command -> do
 
-        # moving
+    #     match data_type:
+    #         # case "command":
+    #         #     self.__process_command(topic, data)
+    #         #     pass
 
-        # water interval
+    #         # case "measurement":
+    #         #     self.__process_measurement(topic, data)
+    #         #     pass
 
-        pass
+    #         case "receipt":
+    #             # self.__process_receipt(topic,data)
+    #             pass
 
-    def __process_data(self, topic: str, data: dict) -> None:
-        """here jobs gets added"""
-        # topic:
+    #     # the data goes from unchecked -> checked
+    #     self.__set_data_status("checked", data)
 
-        data_type = get_data_type(topic)
+    def __has_step_awaited_value(self, step: Step) -> bool:
+        obj = self.system.get_object(step.topic)
 
-        if not data_type:
-            return
-
-        # measurement -> camera -> move
-        # receipt -> delete
-        # command -> do
-
-        match data_type:
-            # case "command":
-            #     self.__process_command(topic, data)
-            #     pass
-
-            case "measurement":
-                self.__process_measurement(topic, data)
-                pass
-
-            case "receipt":
-                # self.__process_receipt(topic,data)
-                pass
-
-        # the data goes from unchecked -> checked
-        self.__set_data_status("checked", data)
-
-    def __do_job(self, job: Job) -> EJobState:
-        # NEED TO THINK OF WHAT HAPPENS WHEN THIS IS A LOOP
-        # CANNOT ITERATE IF THE PREVIOUS STEP WAS NOT DONE.
-        for step in job.steps:
-            # step has already been done, skip to next
-            if step.finished:
-                continue
-
-            if not step.sent:
-                self.publish(step.topic, step.data)
-                return
-
-            # TODO: check receipt or something
-
-            # passed deadline, kill job
-            if self.time >= step.timestamp + step.deadline:
-                return EJobState.KILLED
-
-            # we have not waited long enough to continue
-            if self.time < step.timestamp + step.wait:
-                return EJobState.PENDING
-
-        # cannot return done here?
-        return EJobState.DONE
-
-    def __is_first_in_line(self, job: Job) -> bool:
-        return self.jobs.index(job) == 0
-
- 
-    
-    def __is_step_finished(self,step:Step)->bool:
-        obj=self.system.get_object(step.topic)
-        
-        if step.data["value"]!=obj.value:
+        if step.data["value"] != obj.value:
             return False
         return True
 
-    def __check(self) -> None:
+    def __do_job(self) -> None:
+        """does one job at a time, FIFO"""
         # we have pending jobs
-        for job in self.jobs.copy():
-            # TODO: handle priority, highest first
+        if len(self.jobs) == 0:
+            logging.debug("No new jobs available")
+            return
 
-            if job.has_state(EJobState.UNCHECKED):
-                job.set_state(EJobState.QUEUED)
+        # we only want to do one job at a time
+        # first job is the one we care about
+        job = self.jobs[0]
 
-            # set next job in line to queued->pending
-            if self.__is_first_in_line(job) and job.has_state(EJobState.QUEUED):
-                job.set_state(EJobState.PENDING)
+        # job has been killed -> delete
+        if job.has_state(EJobState.KILLED):
+            self.jobs.remove(job)
+            logging.warning(f"Deleted killed job {job=}")
+            return
 
+        if job.has_state(EJobState.DONE):
+            # job is done,
+            self.__delete_job(job)
+            return
+
+        # set next job in line to queued->pending
+        if job.has_state(EJobState.QUEUED):
+            job.set_state(EJobState.PENDING)
+
+        if job.has_state(EJobState.PENDING):
             # actually do job
-            if job.has_state(EJobState.PENDING):
-                job_state = self.__do_job(job)
+            # get step
+            step = job.steps[job.at_step]
 
-                # job has been killed -> delete
-                if job_state == EJobState.KILLED:
-                    self.jobs.remove(job)
-                    logging.warning(f"Deleted killed job {job=}")
-
-                # job is pending
-                if job_state == EJobState.PENDING:
-                    # get step
-                    step=job.steps[job.at_step]
-
-                    if step.has_sent:
-
-                        if step.has_passed_deadline():
-                            job.set_state(EJobState.KILLED)
-                            break
-
-                        if step.has_passed_wait_time():
-                            job.set_state(EJobState.KILLED)
-                            break
-                        
-                        if 
-                    
-                        logging.debug("Waiting for step {step=} to finish, has been sent")
-
-                        # if is killed
-
-
-                    # check if current step is done
-                    if self.__is_step_finished():
-                        job.at_step+=1
-
-
-                    # for step in job.steps:
-                    if job.done_with_steps():
-                        logging.debug(f"Done with all steps in job {job=}")
-                        break
-
-
-                    
-                    # do step
-                    self.publish(step.topic,step.data)
-                    step.sent()
-                    
-
-                    
-
-                # we finished the job!
+            # for step in job.steps:
+            if job.done_with_steps():
+                logging.debug(f"Done with all steps in job {job=}")
                 job.set_state(EJobState.DONE)
+                return
 
-                # break?
+            if not step.has_sent:
+                # actually do step
+                self.publish(step.topic, step.data)
+                step.sent()
+                return
 
-                # self.publish(job["topic"], job)
+            if step.has_passed_deadline():
+                job.set_state(EJobState.KILLED)
+                return
 
-                # we published, now a pending job
-                # pending_job = job.set_state(EJobState.PENDING)
-                # self.__replace_job(pending_job)
+            if step.has_passed_wait_time():
+                job.set_state(EJobState.KILLED)
+                return
 
-                # we continue to save a couple of ms
+            if self.__has_step_awaited_value():
+                # wait is time to wait AFTER step is done
+                logging.debug(f"Step has finished!")
+                time.sleep(step.wait)
+                job.at_step += 1
+                return
 
-            if job.has_state(EJobState.DONE):
-                # job is done,
-                self.__delete_job(job)
-
-        self.data = [{}]
-
-        # check all data we know of, reversed since newest gets appended
-        for data in reversed(self.data):
-            topic = data.get("topic")
-
-            # if not topic_contains(topic, "measurement", "receipt"):
-            #     # irrelevant -> skip
-            #     continue
-
-            if has_status("checked", data):
-                # we have checked this data, but it can have already
-                # been done or not, we need to check
-                if False:
-                    self.__set_data_status("done", data)
-
-            if has_status("done", data):
-                # we have recevied receipt for this, so we delete
-                self.__delete_data(data)
-                continue  # done with this data
-
-            self.__check_interval_jobs()
-            # -> data is unchecked
-            # we need to check it
-            self.__process_data(topic, data)
+            logging.debug(f"Waiting for step {step=} to finish, has been sent")
 
     def __add_job(self, steps: list[Step]) -> None:
         job = Job(steps)
         job.set_state(EJobState.QUEUED)
         self.jobs.append(job)
 
-        logging.info(f"{self.jobs=}")
+        logging.info(f"Added job! jobs is now{self.jobs=}")
 
     def run(self) -> None:
         while True:
             logging.info("Autonomy is running")
-            self.time = time.time()
+            # self.time = time.time()
 
             if self.is_enabled:
                 logging.debug("Autonomy is enabled")
-                self.__check()
+                self.__check_interval_jobs()
+                self.__do_job()
             else:
                 logging.warning("Autonomy is disabled")
 
