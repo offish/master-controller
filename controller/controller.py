@@ -183,8 +183,7 @@ class Controller:
         if obj.get_value() is None:
             return
 
-        
-        current_state=self.system.get_state()
+        current_state = self.system.get_state()
         self.db.update_state(current_state)
 
         self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
@@ -274,7 +273,10 @@ class Controller:
 
             previous_value = states[unique_id]
             obj = self.system.get_object_from_unique_id(unique_id)
-            command = obj.get_command(value=previous_value)
+            # command = obj.get_command(value=previous_value)
+
+            # TODO: test lights and job queueing
+            command = obj.get_command(value=0)
             self.publish(*command)
 
     def __setup_device(self, data: dict) -> None:

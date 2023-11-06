@@ -53,6 +53,9 @@ class Step:
     def has_passed_deadline(self) -> bool:
         return time.time() >= self.timestamp + self.deadline
 
+    def __str__(self) -> str:
+        return f"{self.topic} {self.data}"
+
 
 class Job:
     """a job consists of one or more steps"""

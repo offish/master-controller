@@ -41,6 +41,7 @@ class Autonomy:
 
     def __delete_job(self, job: Job) -> None:
         self.jobs.remove(job)
+        logging.debug(f"Deleted job {job}")
 
     def __check_lights(self) -> None:
         hour = dt.datetime.now().hour
@@ -52,9 +53,11 @@ class Autonomy:
                 continue
 
             # TODO: replace with actuator.ruleset
-            if hour < 21 or hour > 7:
+            if 7 < hour and hour < 21:
+                logging.debug("turn on lights")
                 step = Step(*actuator.get_command(value=1))
             else:
+                logging.debug("turn off lights")
                 step = Step(*actuator.get_command(value=0))
 
             # TODO: fix makes a million jobs
@@ -128,8 +131,8 @@ class Autonomy:
 
         # job has been killed -> delete
         if job.has_state(EJobState.KILLED):
-            self.jobs.remove(job)
-            logging.warning(f"Deleted killed job {job=}")
+            logging.warning("Job has been killed")
+            self.__delete_job(job)
             return
 
         if job.has_state(EJobState.DONE):
@@ -172,21 +175,50 @@ class Autonomy:
 
             logging.debug(f"Waiting for step {step=} to finish, has been sent")
 
+    def __already_has_this_state(self, step: Step) -> bool:
+        value = step.data.get("value")
+        obj = self.system.get_object(step.topic)
+
+        return value == obj.value
+
+    def __remove_duplicate_steps(self, steps: list[Step]) -> list[Step]:
+        steps_to_queue = []
+
+        if not self.jobs:
+            return steps
+
+        for job in self.jobs:
+            # only compare with queued jobs
+            if job.state != EJobState.QUEUED:
+                continue
+
+            for queued_step in job.steps:
+                for step in steps:
+                    if str(step) == str(queued_step):
+                        continue
+
+                    steps_to_queue.append(step)
+
+        return steps_to_queue
+
     def __add_job(self, steps: list[Step]) -> None:
         # TODO: check if value != current value
         # no need to add job if it already is set to that
         if len(steps) == 1:
-            step = steps[0]
-
-            if step.data["value"] == self.system.get_object(step.topic):
-                # already done -> ignore
+            # TODO: do this for all steps
+            if self.__already_has_this_state(steps[0]):
                 return
 
-        job = Job(steps)
+        steps_to_do = self.__remove_duplicate_steps(steps)
+
+        if not steps_to_do:
+            return
+
+        job = Job(steps_to_do)
         job.set_state(EJobState.QUEUED)
         self.jobs.append(job)
 
-        logging.info(f"Added job! jobs is now {self.jobs=}")
+        logging.info(f"Added job!")
 
     def run(self) -> None:
         while True:
@@ -194,6 +226,7 @@ class Autonomy:
             # self.time = time.time()
 
             if self.is_enabled:
+                logging.debug(f"{self.jobs=}")
                 logging.debug("Autonomy is enabled")
                 self.__check_interval_jobs()
                 self.__do_job()
