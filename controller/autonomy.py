@@ -97,9 +97,10 @@ class Autonomy:
 
             # TODO: replace with actuator.ruleset
             if hour < 21 or hour > 7:
-                actuator.get_command(value=1)
+                # TODO: schedule job
+                self.__add_job(*actuator.get_command(value=1))
             else:
-                actuator.get_command(value=0)
+                self.__add_job(*actuator.get_command(value=0))
 
             # topics = self.__get_topics("LED")
 
@@ -203,24 +204,79 @@ class Autonomy:
         # cannot return done here?
         return EJobState.DONE
 
+    def __is_first_in_line(self, job: Job) -> bool:
+        return self.jobs.index(job) == 0
+
+ 
+    
+    def __is_step_finished(self,step:Step)->bool:
+        obj=self.system.get_object(step.topic)
+        
+        if step.data["value"]!=obj.value:
+            return False
+        return True
+
     def __check(self) -> None:
         # we have pending jobs
-        for job in self.jobs:
+        for job in self.jobs.copy():
             # TODO: handle priority, highest first
 
             if job.has_state(EJobState.UNCHECKED):
+                job.set_state(EJobState.QUEUED)
+
+            # set next job in line to queued->pending
+            if self.__is_first_in_line(job) and job.has_state(EJobState.QUEUED):
                 job.set_state(EJobState.PENDING)
 
+            # actually do job
             if job.has_state(EJobState.PENDING):
                 job_state = self.__do_job(job)
 
+                # job has been killed -> delete
                 if job_state == EJobState.KILLED:
-                    # delete job
-                    pass
+                    self.jobs.remove(job)
+                    logging.warning(f"Deleted killed job {job=}")
 
+                # job is pending
                 if job_state == EJobState.PENDING:
-                    #
-                    break
+                    # get step
+                    step=job.steps[job.at_step]
+
+                    if step.has_sent:
+
+                        if step.has_passed_deadline():
+                            job.set_state(EJobState.KILLED)
+                            break
+
+                        if step.has_passed_wait_time():
+                            job.set_state(EJobState.KILLED)
+                            break
+                        
+                        if 
+                    
+                        logging.debug("Waiting for step {step=} to finish, has been sent")
+
+                        # if is killed
+
+
+                    # check if current step is done
+                    if self.__is_step_finished():
+                        job.at_step+=1
+
+
+                    # for step in job.steps:
+                    if job.done_with_steps():
+                        logging.debug(f"Done with all steps in job {job=}")
+                        break
+
+
+                    
+                    # do step
+                    self.publish(step.topic,step.data)
+                    step.sent()
+                    
+
+                    
 
                 # we finished the job!
                 job.set_state(EJobState.DONE)
@@ -265,11 +321,12 @@ class Autonomy:
             # we need to check it
             self.__process_data(topic, data)
 
-    def __add_job(self, topic: str, data: dict) -> None:
-        data["topic"] = topic
-        data["time"] = time.time()
-        data["status"] = "queued"
-        self.jobs.append(data)
+    def __add_job(self, steps: list[Step]) -> None:
+        job = Job(steps)
+        job.set_state(EJobState.QUEUED)
+        self.jobs.append(job)
+
+        logging.info(f"{self.jobs=}")
 
     def run(self) -> None:
         while True:

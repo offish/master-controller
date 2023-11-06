@@ -231,17 +231,35 @@ class HydroplantSystem:
 
         return topics
 
-    def get_gui_sync_data(self) -> dict:
-        data = {}
+    def get_logic_controllers(self)->list[LogicController]:
+        """gets all logic controllers for all floors"""
+        logic_controllers=[]
 
         for floor in self.get_floors():
             for logic_controller in floor.get_logic_controllers():
-                data[logic_controller.gui_topic] = logic_controller.get_value()
+                logic_controllers.append(logic_controller)
+        
+        return logic_controllers
 
-            for stage in floor.get_stages():
-                for actuator in stage.get_actuators():
-                    data[actuator.gui_topic] = actuator.get_value()
+    def get_state(self)->dict:
+        data = {}
 
+        for actuator in self.get_actuators():
+            data[actuator.unique_id]=actuator.get_value()
+        
+        return data
+
+
+    def get_gui_sync_data(self) -> dict:
+        data = {}
+
+        for actuator in self.get_actuators():
+            data[actuator.gui_topic]=actuator.get_value()
+
+        # TODO: are there states for logic controllers?
+        for logic_controller in self.get_logic_controllers():
+            data[logic_controller.gui_topic]=logic_controller.get_value()
+        
         return data
 
     def get_floor_by_name(self, name: str) -> Floor | None:
