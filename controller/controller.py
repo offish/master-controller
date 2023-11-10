@@ -100,7 +100,7 @@ class Controller:
 
         if topic_contains(topic, "disconnected"):
             node_id = data["device_id"]
-            floor_name = data["floor"]
+            floor_name = data.get("floor")
 
             logging.warning(f"{node_id} disconnected")
             self.log(1, f"{node_id} disconnected")
@@ -127,12 +127,13 @@ class Controller:
 
             self.__update_and_publish_state(topic, data)
 
+        # TODO: do we need this?
         # sensor measurement
-        if topic_contains(topic, "measurement"):
-            logging.info("Got new sensor measurement")
+        # if topic_contains(topic, "measurement"):
+        #     logging.info("Got new sensor measurement")
 
-            sensor_id = get_last_part(topic)
-            self.db.add_measurement(node_id, sensor_id, data)
+        #     sensor_id = get_last_part(topic)
+        #     self.db.add_measurement(node_id, sensor_id, data)
 
     def publish(self, topic: str, data: dict | list) -> None:
         """Publish a message to a topic over MQTT.
@@ -182,6 +183,9 @@ class Controller:
         if obj.get_value() is None:
             return
 
+        current_state = self.system.get_state()
+        self.db.update_state(current_state)
+
         self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
 
     def __handle_gui_command(self, topic: str, data: dict) -> None:
@@ -229,6 +233,10 @@ class Controller:
         # a device can only be on 1 floor
         floor_name = get_floor(data)
 
+        # disconnect does publish fast enough so in case something
+        # connects before it is disconnected we need to delete it
+        self.system.delete_objects(node_id, floor_name)
+
         # get the relevant floor
         floor = self.system.get_floor_by_name(floor_name)
         unique_ids = []
@@ -260,7 +268,7 @@ class Controller:
         self.__act_on_topics(True, *new_topics)
         return unique_ids
 
-    def __publish_previous_values(self, unique_ids: list[str]) -> None:
+    def __publish_last_states(self, unique_ids: list[str]) -> None:
         states = self.db.get_state()
 
         for unique_id in unique_ids:
@@ -269,7 +277,10 @@ class Controller:
 
             previous_value = states[unique_id]
             obj = self.system.get_object_from_unique_id(unique_id)
-            command = obj.get_command(value=previous_value)
+            # command = obj.get_command(value=previous_value)
+
+            # TODO: test lights and job queueing
+            command = obj.get_command(value=0)
             self.publish(*command)
 
     def __setup_device(self, data: dict) -> None:
@@ -289,7 +300,8 @@ class Controller:
             # other nodes has interesting data
             unique_ids = self.__handle_device_present(data, node_id)
 
-            self.__publish_previous_values(unique_ids)
+            # set state to the last one we knew of
+            self.__publish_last_states(unique_ids)
 
         # update gui with all topics (will only happen when something connects)
         self.publish(GUI_TOPICS, {"topics": self.system.get_gui_topics()})
@@ -303,9 +315,6 @@ class Controller:
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)
 
-        # get previous saved state of the system
-        # self.state = self.db.get_state()
-
         logging.debug("Starting MQTT loop")
         # start mqtt communication in thread
         communication = Thread(target=self.client.loop_forever)
@@ -317,7 +326,7 @@ class Controller:
 
         logging.debug("Starting autonomy")
 
-        self.autonomy.disable()  # disable while we test
+        # self.autonomy.disable()  # disable while we test
         self.autonomy.run()
 
         communication.join()
