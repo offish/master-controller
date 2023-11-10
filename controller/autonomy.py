@@ -18,7 +18,7 @@ class Autonomy:
         publish_callback,
         log_callback,
         count: int = 1_000,
-        wait: float = 0.1,
+        wait: float = 1.0,
     ) -> None:
         self.data: list[dict] = []  # specific data master-controller receives
         self.jobs: list[Job] = []  # all pending jobs
@@ -128,7 +128,7 @@ class Autonomy:
         """does one job at a time, FIFO"""
         # we have pending jobs
         if len(self.jobs) == 0:
-            logging.debug("No new jobs available")
+            # logging.debug("No new jobs available")
             return
 
         # we only want to do one job at a time

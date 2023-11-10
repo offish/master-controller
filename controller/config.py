@@ -7,5 +7,5 @@ DATABASE_HOST = "localhost"
 DATABASE_PORT = 27017
 
 # specifics
-AUTONOMY_SLEEP = 1
+AUTONOMY_SLEEP = 0.1
 DISALLOWED_KEYS = ["time", "status", "topic"]  # limit payload bandwidth

@@ -233,6 +233,10 @@ class Controller:
         # a device can only be on 1 floor
         floor_name = get_floor(data)
 
+        # disconnect does publish fast enough so in case something
+        # connects before it is disconnected we need to delete it
+        self.system.delete_objects(node_id, floor_name)
+
         # get the relevant floor
         floor = self.system.get_floor_by_name(floor_name)
         unique_ids = []

@@ -8,6 +8,7 @@ from .utils import (
 )
 
 from enum import IntEnum
+import logging
 
 
 class EntityType(IntEnum):
@@ -17,6 +18,11 @@ class EntityType(IntEnum):
     LED = 4
     STEPPER = 5
     WATER_PUMP = 6
+    WATER_PUMP_NUT = 7
+    VALVE = 8
+    VALVE_FLUSH = 9
+    NPK = 10
+    NUTRITION_CONTROLLER = 11
 
 
 class Entity:
@@ -39,6 +45,8 @@ class Entity:
         self.node_id = get_second_last_part(unique_id)
 
         self.type = EntityType[self.id.upper()]
+
+        # logging.debug(f"created object for {unique_id=}")
 
     def get_command(self, **kwargs) -> tuple[str, dict]:
         return (
@@ -158,21 +166,9 @@ class Floor:
     def get_stages(self) -> list[Stage]:
         return [stage for stage in self.stages]
 
-    # def add_stage(self, stage_name: str) -> None:
-    #     self.stages.append(Stage(stage_name))
-
-    # def add_stages(self, *stage_names) -> None:
-    #     [self.add_stage(stage_name) for stage_name in stage_names]
-
 
 class Plant:
     pass
-
-
-# have this class?
-# class GUI:
-#     def __init__(self) -> None:
-#         pass
 
 
 class HydroplantSystem:
@@ -201,20 +197,30 @@ class HydroplantSystem:
             if floor_name and floor_name != floor.name:
                 continue
 
-            for logic_controller in floor.get_logic_controllers():
+            # must copy or else we wont delete all objects
+            for logic_controller in floor.get_logic_controllers().copy():
                 if node_id != logic_controller.node_id:
                     continue
 
                 topics += logic_controller.get_subscribe_topics()
                 floor.logic_controllers.remove(logic_controller)
+                # logging.debug(
+                #     f"deleted {logic_controller=} with {node_id=} {floor_name=}"
+                # )
 
             for stage in floor.get_stages():
-                for actuator in stage.get_actuators():
+                # must copy or else we wont delete all objects
+                for actuator in stage.get_actuators().copy():
+                    logging.debug(f"{actuator.unique_id=}")
+
                     if node_id != actuator.node_id:
                         continue
 
                     topics += actuator.get_subscribe_topics()
                     stage.actuators.remove(actuator)
+                    # logging.debug(
+                    #     f"deleted {actuator.unique_id=} with {node_id=} {floor_name=}"
+                    # )
 
         return topics
 
@@ -231,35 +237,34 @@ class HydroplantSystem:
 
         return topics
 
-    def get_logic_controllers(self)->list[LogicController]:
+    def get_logic_controllers(self) -> list[LogicController]:
         """gets all logic controllers for all floors"""
-        logic_controllers=[]
+        logic_controllers = []
 
         for floor in self.get_floors():
             for logic_controller in floor.get_logic_controllers():
                 logic_controllers.append(logic_controller)
-        
+
         return logic_controllers
 
-    def get_state(self)->dict:
+    def get_state(self) -> dict:
         data = {}
 
         for actuator in self.get_actuators():
-            data[actuator.unique_id]=actuator.get_value()
-        
-        return data
+            data[actuator.unique_id] = actuator.get_value()
 
+        return data
 
     def get_gui_sync_data(self) -> dict:
         data = {}
 
         for actuator in self.get_actuators():
-            data[actuator.gui_topic]=actuator.get_value()
+            data[actuator.gui_topic] = actuator.get_value()
 
         # TODO: are there states for logic controllers?
         for logic_controller in self.get_logic_controllers():
-            data[logic_controller.gui_topic]=logic_controller.get_value()
-        
+            data[logic_controller.gui_topic] = logic_controller.get_value()
+
         return data
 
     def get_floor_by_name(self, name: str) -> Floor | None:
@@ -305,10 +310,6 @@ class HydroplantSystem:
 
         unique_id = get_unique_id(topic)
         return self.get_object_from_unique_id(unique_id)
-
-
-# TODO: when connect, send command on previous state to have correct state
-# if lights were on, send them to be on
 
 
 # system = HydroplantSystem(
