@@ -18,8 +18,8 @@ class EJobPriority(IntEnum):
     HIGH = 3
 
 
-def set_time() -> float:
-    return time.time()
+# def set_time() -> float:
+#     return time.time()
 
 
 class Step:

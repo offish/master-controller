@@ -1,5 +1,5 @@
 from .job import Job, Step, EJobState
-from .hydroplant import HydroplantSystem, EntityType
+from .hydroplant import HydroplantSystem, EntityType, Entity
 
 import datetime as dt
 import logging
@@ -18,7 +18,7 @@ class Autonomy:
         publish_callback,
         log_callback,
         count: int = 1_000,
-        wait: float = 1.0,
+        wait: float = 0.1,
     ) -> None:
         self.data: list[dict] = []  # specific data master-controller receives
         self.jobs: list[Job] = []  # all pending jobs
@@ -30,6 +30,10 @@ class Autonomy:
         self.log = log_callback  # callback for logging
         self.wait = wait  # how long autonomy should sleep for each cycle
         self.time = 0.0  # current time, used for lights
+        self.last_status_print = 0.0
+        self.status_interval = 30  #
+        self.last_interval_check = 0.0
+        self.interval_check_timeout = 60  # every 300 seconds
 
     def enable(self) -> None:
         """Enable the autonomy."""
@@ -60,8 +64,6 @@ class Autonomy:
                 logging.debug("turn off lights")
                 step = Step(*actuator.get_command(value=0))
 
-            # TODO: fix makes a million jobs
-
             self.__add_job([step])
 
     def __check_plants_ready_to_move(self) -> None:
@@ -77,10 +79,14 @@ class Autonomy:
         pass
 
     def __check_interval_jobs(self):
-        # TODO: check time here, time now last check + timeout
+        if self.time < self.last_interval_check + self.interval_check_timeout:
+            return
+
+        logging.info("Checking interval jobs")
         self.__check_plants_ready_to_move()
         self.__check_lights()
         self.__check_water()
+        self.last_interval_check = self.time
 
     # def __process_data(self, topic: str, data: dict) -> None:
     #     """here jobs gets added"""
@@ -175,41 +181,45 @@ class Autonomy:
 
             logging.debug(f"Waiting for step {step=} to finish, has been sent")
 
-    def __already_has_this_state(self, step: Step) -> bool:
+    def __entity_has_step_value(self, step: Step, entity: Entity) -> bool:
         value = step.data.get("value")
-        obj = self.system.get_object(step.topic)
+        return value == entity.get_value()
 
-        return value == obj.value
-
-    def __remove_duplicate_steps(self, steps: list[Step]) -> list[Step]:
-        steps_to_queue = []
-
-        if not self.jobs:
-            return steps
-
+    def __step_already_in_queue(self, step: Step) -> bool:
         for job in self.jobs:
             # only compare with queued jobs
             if job.state != EJobState.QUEUED:
                 continue
 
             for queued_step in job.steps:
-                for step in steps:
-                    if str(step) == str(queued_step):
-                        continue
+                # equal means duplicate
+                if str(step) == str(queued_step):
+                    return True
 
-                    steps_to_queue.append(step)
-
-        return steps_to_queue
+        return False
 
     def __add_job(self, steps: list[Step]) -> None:
         # TODO: check if value != current value
         # no need to add job if it already is set to that
-        if len(steps) == 1:
-            # TODO: do this for all steps
-            if self.__already_has_this_state(steps[0]):
-                return
+        steps_to_do = []
 
-        steps_to_do = self.__remove_duplicate_steps(steps)
+        for step in steps:
+            entity = self.system.get_object(step.topic)
+
+            if entity.get_value() == None:
+                # not turned on yet?
+                pass
+
+            # check if entity already has this value
+            if self.__entity_has_step_value(step, entity):
+                continue
+
+            if self.__step_already_in_queue(step):
+                continue
+
+            steps_to_do.append(step)
+
+        logging.debug(f"{steps_to_do=}")
 
         if not steps_to_do:
             return
@@ -222,12 +232,14 @@ class Autonomy:
 
     def run(self) -> None:
         while True:
-            logging.info("Autonomy is running")
-            # self.time = time.time()
+            self.time = time.time()
 
             if self.is_enabled:
-                logging.debug(f"{self.jobs=}")
-                logging.debug("Autonomy is enabled")
+                if self.time > self.last_status_print + self.status_interval:
+                    logging.debug("Autonomy is enabled")
+                    logging.debug(f"{self.jobs=}")
+                    self.last_status_print = self.time
+
                 self.__check_interval_jobs()
                 self.__do_job()
             else:
