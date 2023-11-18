@@ -1,4 +1,4 @@
-from .hydroplant import HydroplantSystem, Floor
+from .hydroplant import HydroplantSystem, Floor, PlantHolder
 from .autonomy import Autonomy
 from .database import Database
 from .config import BROKER_HOST, BROKER_PORT, AUTONOMY_SLEEP, DISALLOWED_KEYS
@@ -38,6 +38,17 @@ class Controller:
             Floor("floor_3", "stage_1", "stage_2", "stage_3"),
         )
 
+        # add plants for testing purposes
+        # full stage 1
+        # 1 in stage 2
+        # self.system.floors[0].stages[1].plant_holders = [
+        #     PlantHolder(1),
+        #     PlantHolder(2),
+        #     PlantHolder(3),
+        #     PlantHolder(4),
+        # ]
+        # self.system.floors[1].stages[0].plant_holders = [PlantHolder(2)]
+
         self.autonomy = Autonomy(
             system=self.system,
             publish_callback=self.publish,
@@ -51,6 +62,10 @@ class Controller:
 
         # subscribe to devices, so they can present themselves
         client.subscribe(DEVICE_TOPIC)
+
+        # only for demonstration
+        client.subscribe("hydroplant/demo1")
+        client.subscribe("hydroplant/demo2")
 
         # subscribing to
         client.subscribe(AUTONOMY_TOPIC)
@@ -97,6 +112,13 @@ class Controller:
             return
 
         # ok
+
+        # demonstration purposes
+        if topic_contains(topic, "hydroplant/demo1"):
+            self.autonomy.moved_demo_plants = False
+
+        if topic_contains(topic, "hydroplant/demo2"):
+            self.autonomy.inspected_demo_plants = False
 
         if topic_contains(topic, "disconnected"):
             node_id = data["device_id"]
@@ -275,11 +297,10 @@ class Controller:
             if unique_id not in states:
                 continue
 
-            previous_value = states[unique_id]
+            previous_value = states.get(unique_id)
             obj = self.system.get_object_from_unique_id(unique_id)
             # command = obj.get_command(value=previous_value)
 
-            # TODO: test lights and job queueing
             command = obj.get_command(value=0)
             self.publish(*command)
 

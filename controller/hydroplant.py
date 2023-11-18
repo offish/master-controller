@@ -23,9 +23,14 @@ class EntityType(IntEnum):
     VALVE_FLUSH = 9
     NPK = 10
     NUTRITION_CONTROLLER = 11
+    PH_REGULATOR = 12
+    EC_REGULATOR = 13
+    WATER_CIRC = 14
 
 
 class Entity:
+    """ """
+
     def __init__(self, unique_id: str) -> None:
         # floor_1/stage_1/climate_node/LED or
         # floor_1/plant_information_node/plant_information
@@ -49,6 +54,14 @@ class Entity:
         # logging.debug(f"created object for {unique_id=}")
 
     def get_command(self, **kwargs) -> tuple[str, dict]:
+        """Gets
+
+        Args:
+
+
+        """
+        # TODO: add if test here to check if plant_mover and add "command": "goto"
+
         return (
             self.command,
             {
@@ -93,11 +106,35 @@ class Actuator(Entity):
         super().__init__(unique_id)
 
 
+def stage_name_to_value(stage: str) -> int:
+    return int(stage.replace("stage_", ""))
+
+
+class PlantHolder:
+    def __init__(self, place: int) -> None:
+        self.place = place
+        # self.current_stage = "stage_0"
+        # self.wanted_stage = "stage_0"
+
+    # def should_move(self) -> bool:
+    #     wanted_stage = stage_name_to_value(self.wanted_stage)
+    #     current_stage = stage_name_to_value(self.current_stage)
+
+    #     return wanted_stage > current_stage
+
+    # def update_stage(self, stage: str) -> None:
+    #     self.wanted_stage = stage
+
+
 class Stage:
     # stage_1
     def __init__(self, name: str) -> None:
         self.name = name
         self.actuators: list[Actuator] = []
+        self.plant_holders: list[PlantHolder] = []
+
+    def get_plant_holders(self) -> list[PlantHolder]:
+        return self.plant_holders
 
     def add_actuator(self, unique_id: str) -> Actuator:
         actuator = Actuator(unique_id)
@@ -167,14 +204,19 @@ class Floor:
         return [stage for stage in self.stages]
 
 
-class Plant:
-    pass
-
-
 class HydroplantSystem:
     def __init__(self, *floors) -> None:
         self.floors: list[Floor] = [floor for floor in floors]
         # self.gui: GUI = None
+
+    def get_plant_holders(self) -> list[PlantHolder]:
+        plant_holders = []
+
+        for floor in self.get_floors():
+            for stage in floor.get_stages():
+                plant_holders += stage.get_plant_holders()
+
+        return plant_holders
 
     def get_actuators(self) -> list[Actuator]:
         actuators = []
