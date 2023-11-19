@@ -40,6 +40,16 @@ def get_topic_ids(topic: str) -> tuple[str, str]:
 
 
 def get_device_topic(node_id: str, device_id: str, all_devices: list[str]) -> str:
+    """Get the MQTT topic for a specific device.
+
+    Args:
+        node_id: Node ID.
+        device_id: Device ID.
+        all_devices: List of MQTT topics.
+
+    Returns:
+        The MQTT topic for the specified device, or an empty string if not found.
+    """
     for device in all_devices:
         if node_id in device and device_id in device:
             return device
@@ -201,6 +211,15 @@ def topic_contains(topic: str, *args: str) -> bool:
 
 
 def get_topics_containing(topics: list[str], string: str) -> list[str]:
+    """Filter topics that contain a specific string.
+
+    Args:
+        topics: List of MQTT topics.
+        string: The string to check for in the topics.
+
+    Returns:
+        Filtered list of topics that contain the specified string.
+    """
     result = []
 
     for topic in topics:
@@ -253,6 +272,14 @@ def get_unique_id(topic: str) -> str:
 
 
 def get_data_type(topic: str) -> str:
+    """Get the data type from an MQTT topic.
+
+    Args:
+        topic: The MQTT topic.
+
+    Returns:
+        The data type ("command", "measurement", "receipt") found in the topic.
+    """
     for data_type in ["command", "measurement", "receipt"]:
         if data_type in topic:
             return data_type
@@ -260,4 +287,12 @@ def get_data_type(topic: str) -> str:
 
 
 def is_receipt(topic: str) -> bool:
+    """Check if the MQTT topic represents a receipt.
+
+    Args:
+        topic: The MQTT topic.
+
+    Returns:
+        True if the topic contains "/receipt", False otherwise.
+    """
     return topic.find("/receipt") != -1

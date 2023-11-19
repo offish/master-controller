@@ -27,6 +27,7 @@ class Controller:
     """
 
     def __init__(self) -> None:
+        """Initialize the Controller class."""
         self.client = mqtt.Client(client_id="master_controller")
         self.client.will_set(MASTER_DISCONNECT_TOPIC, "")
 
@@ -183,6 +184,12 @@ class Controller:
         self.client.publish(topic, payload=json.dumps(data))
 
     def log(self, level: int, message: str) -> None:
+        """Log a message and publish it over MQTT.
+
+        Args:
+            level: Log level (0: INFO, 1: WARNING, 2: ERROR).
+            message: Log message.
+        """
         self.publish(
             GUI_LOG,
             {
@@ -194,6 +201,12 @@ class Controller:
         )
 
     def __update_and_publish_state(self, topic: str, data: dict) -> None:
+        """Update the state based on a receipt and publish the updated state.
+
+        Args:
+            topic: MQTT topic of the receipt.
+            data: Receipt data.
+        """
         topic = topic.replace("/receipt", "")
         # unique id is floor_1/stage_1/climate_node/LED
         unique_id = get_unique_id(topic)
@@ -211,6 +224,12 @@ class Controller:
         self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
 
     def __handle_gui_command(self, topic: str, data: dict) -> None:
+        """Handle a GUI command and perform the necessary actions.
+
+        Args:
+            topic: MQTT topic of the GUI command.
+            data: GUI command data.
+        """
         # turn on or off autonomy from gui
         if topic == AUTONOMY_TOPIC:
             if data["value"]:
@@ -249,7 +268,15 @@ class Controller:
                 logging.info(f"Unsubscribed to {topic}")
 
     def __handle_device_present(self, data: dict, node_id: str) -> list[str]:
-        """returns a list of new unique ids"""
+        """Handle the presence of a device and return a list of new unique IDs.
+
+        Args:
+            data: Data received about the device.
+            node_id: ID of the device.
+
+        Returns:
+            List of new unique IDs created for the device.
+        """
         new_topics = []
 
         # a device can only be on 1 floor
@@ -291,6 +318,11 @@ class Controller:
         return unique_ids
 
     def __publish_last_states(self, unique_ids: list[str]) -> None:
+        """Publish the last known states for a list of unique IDs.
+
+        Args:
+            unique_ids: List of unique IDs.
+        """
         states = self.db.get_state()
 
         for unique_id in unique_ids:
@@ -329,9 +361,7 @@ class Controller:
         self.publish(SYNC_TOPIC, self.system.get_gui_sync_data())
 
     def run(self) -> None:
-        """Start the master-controller and keep it running
-        indefinitely.
-        """
+        """Start the master-controller and keep it running indefinitely."""
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.connect(BROKER_HOST, BROKER_PORT, 60)

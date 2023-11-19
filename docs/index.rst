@@ -11,9 +11,11 @@ hydroplant-master-controller's documentation
    :caption: Contents:
 
    pages/autonomy
-   pages/controller
    pages/config
+   pages/controller
    pages/database
+   pages/hydroplant
+   pages/job
    pages/utils
 
 Indices and tables

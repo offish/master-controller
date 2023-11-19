@@ -23,15 +23,17 @@ class EJobPriority(IntEnum):
 
 
 class Step:
-    """
-    wait: how long to wait after doing a step. say turning off water.
-    how long does it take for the containers to empty?
-    deadline: relative time which must be met, else it will kill the job
-    """
-
     def __init__(
         self, topic: str, data: dict, wait: float = 0.0, deadline: float = 60.0
     ) -> None:
+        """A step in a job.
+
+        Args:
+            topic: The MQTT topic for the step.
+            data: Data associated with the step.
+            wait: How long to wait after performing the step.
+            deadline: The relative time within which the step must be completed.
+        """
         self.topic = topic
         self.data = data
         self.wait = wait
@@ -44,6 +46,7 @@ class Step:
         # self.has_finished = False
 
     def sent(self) -> None:
+        """Mark the step as sent."""
         self.has_sent = True
         self.time_sent = time.time()
 
@@ -51,16 +54,25 @@ class Step:
     #     self.finished = True
 
     def has_passed_deadline(self) -> bool:
+        """Check if the step has passed its deadline.
+
+        Returns:
+            True if the step has passed its deadline, False otherwise.
+        """
         return time.time() >= self.timestamp + self.deadline
 
     def __str__(self) -> str:
+        """Return a string representation of the step."""
         return f"{self.topic} {self.data}"
 
 
 class Job:
-    """a job consists of one or more steps"""
-
     def __init__(self, steps: list[Step]) -> None:
+        """Initialize a Job instance.
+
+        Args:
+            steps: List of steps in the job.
+        """
         self.steps: list[Step] = steps
         self.timestamp = time.time()
         self.state = EJobState.UNCHECKED
@@ -68,13 +80,30 @@ class Job:
         self.at_step = 0
 
     def done_with_steps(self) -> bool:
-        # [1,2] max 1 +1 = 2
+        """Check if all steps in the job are done.
+
+        Returns:
+            True if all steps are done, False otherwise.
+        """
         return self.at_step == len(self.steps)
 
     def has_state(self, state: EJobState) -> bool:
+        """Check if the job has a specific state.
+
+        Args:
+            state: The state to check.
+
+        Returns:
+            True if the job has the specified state, False otherwise.
+        """
         return self.state == state
 
     def set_state(self, state: EJobState) -> None:
+        """Set the state of the job.
+
+        Args:
+            state: The new state.
+        """
         logging.debug(f"State changed to {state=}")
         self.state = state
 

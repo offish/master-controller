@@ -7,6 +7,12 @@ from pymongo import MongoClient, collection
 
 class Database:
     def __init__(self, host: str = DATABASE_HOST, port: int = DATABASE_PORT) -> None:
+        """Initialize the Database object.
+
+        Args:
+            host: The hostname of the MongoDB server.
+            port: The port number for the MongoDB server.
+        """
         self.__client = MongoClient(host=host, port=port)
         self.db = self.__client["hydroplant"]
         logging.info("Connected to database")
@@ -18,13 +24,12 @@ class Database:
         self.logs = self.db["logs"]
 
     def add_measurement(self, node_id: str, sensor_id: str, data: dict) -> None:
-        """Insert measurement into database.
+        """Insert a measurement into the database.
 
         Args:
             node_id: Name of the node.
             sensor_id: Name of the sensor.
-            data: Data which should be added, time will also be added to the
-              measurement.
+            data: Data to be added; time will also be added to the measurement.
         """
         data["node_id"] = node_id
         data["sensor_id"] = sensor_id
@@ -33,14 +38,14 @@ class Database:
         logging.debug(f"Added to measurement {data=}")
 
     def add_log(self, node_id: str, sensor_id: str, data: dict) -> None:
-        """Insert log into database.
+        """Insert a log entry into the database.
 
         Used for logging.
 
         Args:
             node_id: Name of the node.
             sensor_id: Name of the sensor.
-            data: Data which should be added message.
+            data: Data to be added as a log message.
         """
         data["node_id"] = node_id
         data["sensor_id"] = sensor_id
@@ -49,6 +54,11 @@ class Database:
         logging.debug(f"Added to logs {data=}")
 
     def get_state(self) -> dict:
+        """Retrieve the current state from the database.
+
+        Returns:
+            The current state.
+        """
         result = self.state.find_one({})
 
         if not result:
@@ -60,6 +70,11 @@ class Database:
         return result
 
     def update_state(self, state: dict) -> None:
+        """Update the state in the database.
+
+        Args:
+            state: The new state to be updated.
+        """
         data = self.get_state()
 
         # only the case if collection is empty

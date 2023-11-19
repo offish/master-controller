@@ -17,12 +17,19 @@ class Autonomy:
         system,
         publish_callback,
         log_callback,
-        count: int = 1_000,
         wait: float = 1.0,
     ) -> None:
+        """Initialize Autonomy object.
+
+        Args:
+            system: The HydroplantSystem instance.
+            publish_callback: Callback to communicate with MQTT.
+            log_callback: Callback for logging.
+            wait: How long autonomy should sleep for each cycle.
+        """
         self.data: list[dict] = []  # specific data master-controller receives
         self.jobs: list[Job] = []  # all pending jobs
-        self.count = count  # amount of data autonomy should remember
+
         self.is_enabled = True  # turn on/off autonomy logic
         self.publish = publish_callback  # callback to communicate with MQTT
         self.system: HydroplantSystem = system
@@ -48,10 +55,16 @@ class Autonomy:
         self.is_enabled = False
 
     def __delete_job(self, job: Job) -> None:
+        """Delete a job from the list.
+
+        Args:
+            job: The Job instance to be deleted.
+        """
         self.jobs.remove(job)
         logging.debug(f"Deleted job {job}")
 
     def __check_lights(self) -> None:
+        """Check and control the lights based on the current hour."""
         hour = dt.datetime.now().hour
 
         logging.debug(f"current hour {hour}")
@@ -71,6 +84,7 @@ class Autonomy:
             self.__add_job([step])
 
     def __inspect_plants(self) -> None:
+        """Inspect plants and queue jobs if ready to move."""
         # loop through each place
         # take pic
         # if ready to move -> add job
@@ -113,6 +127,7 @@ class Autonomy:
         pass
 
     def __check_move_plants(self) -> None:
+        """Check if plants should be moved and queue jobs accordingly."""
         # first check if we should move or not
 
         if self.moved_demo_plants:
@@ -180,6 +195,7 @@ class Autonomy:
         # algorithm for queueing which plant holders to move where
 
     def __check_interval_jobs(self):
+        """Check interval jobs and queue if necessary."""
         if self.time < self.last_interval_check + self.interval_check_timeout:
             return
 
@@ -191,6 +207,14 @@ class Autonomy:
         self.last_interval_check = self.time
 
     def __has_step_awaited_value(self, step: Step) -> bool:
+        """Check if the step has awaited value.
+
+        Args:
+            step: The Step instance.
+
+        Returns:
+            True if the step has the awaited value, else False.
+        """
         obj = self.system.get_object(step.topic)
 
         if not obj:
@@ -209,7 +233,7 @@ class Autonomy:
         return step.data["value"] == obj.value
 
     def __do_job(self) -> None:
-        """does one job at a time, FIFO"""
+        """Execute one job at a time, following the FIFO principle."""
         # we have pending jobs
         if len(self.jobs) == 0:
             # logging.debug("No new jobs available")
@@ -266,6 +290,15 @@ class Autonomy:
             # logging.debug(f"Waiting for step {step=} to finish, has been sent")
 
     def __entity_has_step_value(self, step: Step, entity: Entity) -> bool:
+        """Check if the entity has the expected value for the given step.
+
+        Args:
+            step: The Step instance.
+            entity: The Entity instance.
+
+        Returns:
+            True if the entity has the expected value, else False.
+        """
         # TODO: remove
         print(step.data)
 
@@ -277,6 +310,14 @@ class Autonomy:
         return value == entity.get_value()
 
     def __step_already_in_queue(self, step: Step) -> bool:
+        """Check if the step is already in the job queue.
+
+        Args:
+            step: The Step instance.
+
+        Returns:
+            True if the step is already in the queue, else False.
+        """
         for job in self.jobs:
             # only compare with queued jobs
             if job.state != EJobState.QUEUED:
@@ -291,6 +332,11 @@ class Autonomy:
         return False
 
     def __add_job(self, steps: list[Step]) -> None:
+        """Add a new job to the job queue.
+
+        Args:
+            steps: List of Step instances to be included in the new job.
+        """
         # TODO: check if value != current value
         # no need to add job if it already is set to that
         steps_to_do = []
@@ -327,6 +373,7 @@ class Autonomy:
         logging.info(f"Added job!")
 
     def run(self) -> None:
+        """Run the autonomy logic continuously."""
         while True:
             self.time = time.time()
 
